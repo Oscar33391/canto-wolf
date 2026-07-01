@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 - 自動開局手動黑夜版 (修正版)</title>
+    <title>廣東話狼人殺 v2.1.0</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .version-badge { font-size: 12px; background: #333; color: #aaa; padding: 3px 8px; border-radius: 12px; vertical-align: middle; margin-left: 5px; }
         input { width: 80%; padding: 10px; margin: 10px 0; border-radius: 4px; border: 1px solid #333; background: #2c2c2c; color: #fff; font-size: 16px; }
         button { width: 85%; padding: 12px; background: #e50914; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px; margin: 5px 0; }
         
@@ -24,7 +25,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 Phase 3</h2>
+        <h2>🐺 廣東話狼人殺 <span class="version-badge">v2.1.0</span></h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -74,7 +75,7 @@
         let myRole = "等待開局...";
         let isHost = false; 
 
-        // 💡 齊人自動開局人數設定 (想 2 人測試就改成 2)
+        // 💡 測試人數設定 (要 2 人開就改 2)
         const TARGET_PLAYERS = 3; 
 
         const nameInput = document.getElementById('nameInput');
@@ -91,7 +92,6 @@
         const mainContainer = document.getElementById('mainContainer');
         const playerCountTitle = document.getElementById('player-count-title');
 
-        // 💡 修正位：加上了 async 關鍵字，按鈕立刻復活！
         joinBtn.addEventListener('click', async () => {
             const username = nameInput.value.trim();
             currentRoom = roomInput.value.trim().toUpperCase();
@@ -125,7 +125,6 @@
                 hostPanel.style.display = "block";
             }
 
-            // 即時同步監聽
             onValue(roomRef, (snapshot) => {
                 const roomData = snapshot.val();
                 if (!roomData) return;
@@ -135,13 +134,13 @@
 
                 playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} / ${TARGET_PLAYERS} 人)：`;
 
-                // 1. 自動開局：人數齊 ＋ 狀態係 waiting ➔ 自動洗牌，並設為 "day"
+                // 自動開局：人數齊 ＋ 狀態係 waiting ➔ 自動洗牌分發身份，狀態定為天亮 "day"
                 if (totalInRoom >= TARGET_PLAYERS && gameState === "waiting" && isHost) {
                     autoStartGameInDay(roomData.players);
                     return; 
                 }
 
-                // 2. 狀態管理（切換黑夜/白天特效）
+                // 狀態管理
                 if (gameState === "night") {
                     document.body.classList.add('night-mode');
                     mainContainer.classList.add('night-card');
@@ -164,7 +163,7 @@
                     phaseStatus.innerText = `⏳ 狀態：等緊齊人 (${totalInRoom}/${TARGET_PLAYERS}) 自動開局...`;
                 }
 
-                // 3. 更新玩家名單與分派超能力按鈕
+                // 更新玩家名單
                 playerList.innerHTML = '';
                 if (roomData.players) {
                     if (roomData.players[myPlayerId]) {
@@ -177,7 +176,6 @@
                             let displayRole = playerObj.role === "等待開局..." ? "⏳ 等待中" : "🔒 身份已隱藏";
                             li.innerHTML = `<span>👤 ${playerObj.name} [${displayRole}]</span>`;
 
-                            // 只有喺黑夜，而且唔係自己部機，才顯示超能力按鈕
                             if (gameState === "night" && id !== myPlayerId) {
                                 if (myRole.includes("狼人")) {
                                     const killBtn = document.createElement('button');
@@ -202,7 +200,6 @@
 
                             playerList.appendChild(li);
 
-                            // 彈出自己張黃色盲盒身分卡
                             if (id === myPlayerId && playerObj.role !== "等待開局...") {
                                 identityCard.style.display = "block";
                                 roleText.innerText = playerObj.role;
@@ -211,7 +208,7 @@
                     });
                 }
 
-                // 4. 更新日誌 Box
+                // 更新日誌
                 logBox.innerHTML = '';
                 if (roomData.logs) {
                     Object.values(roomData.logs).forEach(logObj => {
@@ -227,7 +224,6 @@
             });
         });
 
-        // 🤖 全自動開局（保持天光）
         function autoStartGameInDay(playersData) {
             const playerIds = Object.keys(playersData);
             const totalPlayers = playerIds.length;
@@ -254,7 +250,6 @@
             push(logsRef).set({ text: `☀️ 叫醒所有人（天光）！請在上方黃色盲盒查看個人身份。` });
         }
 
-        // 🌙 手動天黑
         nightBtn.addEventListener('click', () => {
             if (!currentRoom) return;
             set(ref(db, `rooms/${currentRoom}/state`), "night");
@@ -262,7 +257,6 @@
             push(logsRef).set({ text: `🌙 【天黑請閉眼】黑夜降臨，狼人與神職請開始行動！` });
         });
 
-        // ☀️ 手動天亮
         dayBtn.addEventListener('click', () => {
             if (!currentRoom) return;
             set(ref(db, `rooms/${currentRoom}/state`), "day");
