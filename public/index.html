@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.5</title>
+    <title>廣東話狼人殺 v1.7.6</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.5</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.6</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -62,7 +62,7 @@
             <p style="margin: 0 0 5px 0; font-size: 14px; color: #28a745; font-weight: bold;">👑 房主控制面板</p>
             
             <div id="role-config-area" style="background: #252525; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #3c3c3c;">
-                <p style="margin: 0 0 8px 0; font-size: 13px; color: #ffaa00; font-weight: bold; text-align: left;">🛠️ 自訂身份配置 (分配總和需等同入房人數)：</p>
+                <p style="margin: 0 0 8px 0; font-size: 13px; color: #ffaa00; font-weight: bold; text-align: left;">🛠️ 自訂身份配置：</p>
                 <div class="config-row"><span>🐺 狼人 人數:</span><input type="number" id="cfg-wolf" value="2" min="0"></div>
                 <div class="config-row"><span>👁️ 預言家 人數:</span><input type="number" id="cfg-seer" value="1" min="0"></div>
                 <div class="config-row"><span>🧙‍♀️ 女巫 人數:</span><input type="number" id="cfg-witch" value="1" min="0"></div>
@@ -86,7 +86,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, push, onValue, get, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD5Aoi4sTvkfSr7B5mkpovRgs3hK3EXO44",
@@ -156,8 +156,7 @@
             myPlayerId = newPlayerRef.key; 
             set(newPlayerRef, { name: username, role: "等待開局...", ready: false, isDead: false });
 
-            const newLogRef = push(logsRef);
-            set(newLogRef, { text: `👤 ${username} 塞咗入房喇。` });
+            push(logsRef).set({ text: `👤 ${username} 塞咗入房喇。` });
 
             joinBtn.disabled = true;
             joinBtn.innerText = "成功入房";
@@ -177,7 +176,7 @@
                 playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} 人)：`;
 
                 let readyCount = 0;
-                let aliveWolvesCount = 0; // 實時統計生存中的狼人總數
+                let aliveWolvesCount = 0;
                 
                 if (roomData.players) {
                     Object.values(roomData.players).forEach(p => {
@@ -193,7 +192,7 @@
                     amIReady = roomData.players[myPlayerId].ready || false;
                 }
 
-                // 1. 處理投票數據
+                // 1. 處理數據
                 const votesData = roomData.votes || {};
                 const voteCounts = {}; 
                 Object.entries(votesData).forEach(([voterId, targetId]) => {
@@ -212,17 +211,20 @@
                     }
                 });
 
-                // 【核心規則修訂】：只有當某一目標的得票數 剛好等於 全體生還狼人總數 時，才算達成絕對共識
-                let unanimousWolfTargetId = null;
+                const nightWolfLocks = roomData.night_wolf_locks || {};
+                let totalLocksCount = Object.keys(nightWolfLocks).length;
+
+                // 檢查是否所有生存狼人都投了同一個目標，而且所有生存狼人也點選了確定鎖定
+                let verifiedConsensusTargetId = null;
                 Object.entries(wolfVoteCounts).forEach(([tId, voters]) => {
-                    if (voters.length === aliveWolvesCount && aliveWolvesCount > 0) {
-                        unanimousWolfTargetId = tId;
+                    if (voters.length === aliveWolvesCount && totalLocksCount === aliveWolvesCount && aliveWolvesCount > 0) {
+                        verifiedConsensusTargetId = tId;
                     }
                 });
 
                 // 2. 狀態切換與介面控制
                 if (gameState === "waiting") {
-                    phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom} 已準備)`;
+                    phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom})`;
                     readyArea.style.display = "block"; 
                     witchPanel.style.display = "none";
                     if (isHost) {
@@ -240,27 +242,25 @@
                 } else if (gameState === "night") {
                     document.body.classList.add('night-mode');
                     mainContainer.classList.add('night-card');
-                    phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中... 狼人必須全體意見一致方可成功落刀！";
+                    phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中... 狼人需要投同一人並雙重確認鎖定！";
                     readyArea.style.display = "none"; 
                     startGameBtn.style.display = "none";
                     if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "block"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
 
-                    // 女巫面板動態同步
+                    // 女巫秘密魔法藥水面板
                     if (myRole && myRole.includes("女巫") && !amIDead) {
                         witchPanel.style.display = "block";
                         const myWitchData = roomData.players[myPlayerId];
                         const hasSavePotion = myWitchData.hasSavePotion !== false;
-                        const hasPoisonPotion = myWitchData.hasPoisonPotion !== false;
 
-                        witchStatusText.innerText = `剩餘物資：解藥 [${hasSavePotion ? '✅ 有' : '❌ 冇'}] | 毒藥 [${hasPoisonPotion ? '✅ 有' : '❌ 冇'}]`;
+                        witchStatusText.innerText = `剩餘物資：解藥 [${hasSavePotion ? '✅ 有' : '❌ 冇'}] | 毒藥 [${myWitchData.hasPoisonPotion !== false ? '✅ 有' : '❌ 冇'}]`;
 
-                        // 只有狼人達成100%全體共識，女巫才會知道誰被殺；否則顯示盲區提示
-                        if (unanimousWolfTargetId) {
-                            const victimName = roomData.players[unanimousWolfTargetId] ? roomData.players[unanimousWolfTargetId].name : "未知玩家";
-                            witchHint.innerText = `🚨 今晚全體狼人達成一致共識，被殺嘅係：[${victimName}]`;
+                        if (verifiedConsensusTargetId) {
+                            const victimName = roomData.players[verifiedConsensusTargetId] ? roomData.players[verifiedConsensusTargetId].name : "未知玩家";
+                            witchHint.innerText = `🚨 狼人已全體按鍵確認！今晚被殺嘅係：[${victimName}]`;
                             witchSaveBtn.disabled = !hasSavePotion;
                         } else {
-                            witchHint.innerText = `⏳ 狼人內部未達成統一共識（或未投完），你睇唔到邊個被殺...`;
+                            witchHint.innerText = `⏳ 狼人未達成一致決議或未全體按「鎖定確認」，你睇唔到邊個被殺...`;
                             witchSaveBtn.disabled = true;
                         }
                     } else { witchPanel.style.display = "none"; }
@@ -278,19 +278,17 @@
                 } else if (gameState === "ended") {
                     document.body.classList.remove('night-mode');
                     mainContainer.classList.remove('night-card');
-                    phaseStatus.innerText = "🏆 遊戲已經結束！請查看戰報紀錄。";
+                    phaseStatus.innerText = "🏆 遊戲已經結束！";
                     readyArea.style.display = "none";
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
-                    if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
                 }
 
                 // 3. 渲染玩家列表
                 playerList.innerHTML = '';
                 if (roomData.players) {
                     if (roomData.players[myPlayerId]) {
-                        toggleReadyBtn.innerText = amIReady ? "✅ 你已準備就緒 (點擊取消)" : "✋ 點擊準備就緒";
-                        if (amIReady) toggleReadyBtn.classList.add('ready-active'); else toggleReadyBtn.classList.remove('ready-active');
+                        toggleReadyBtn.innerText = amIReady ? "✅ 你已準備就緒" : "✋ 點擊準備就緒";
                     }
 
                     Object.entries(roomData.players).forEach(([id, playerObj]) => {
@@ -307,38 +305,51 @@
                             } else if (gameState === "waiting") {
                                 statusHtml = playerObj.ready ? `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
                             } else {
-                                let displayRole = playerObj.role === "等待開局..." ? "⏳ 等待中" : "🔒 身份已隱藏";
-                                statusHtml = `<span style="color:#aaa;">[${displayRole}]</span>`;
+                                statusHtml = `<span style="color:#aaa;">[🔒 身份隱藏]</span>`;
                             }
 
                             if (gameState === "day" && !isDead) {
                                 const voters = voteCounts[id] || [];
                                 if (voters.length > 0) {
-                                    voteHtml = `<span class="status-badge" style="background:#ffaa00; color:#000; margin-left:5px;">🗳️ ${voters.length} 票 (${voters.join(', ')})</span>`;
+                                    voteHtml = `<span class="status-badge" style="background:#ffaa00; color:#000; margin-left:5px;">🗳️ ${voters.length} 票</span>`;
                                 }
                             }
 
-                            // 狼人隊友夜間即時戰術看板
+                            // 狼人夜間即時戰報與狀態顯示
                             if (gameState === "night" && !isDead && myRole && myRole.includes("狼人") && !amIDead) {
                                 const wVoters = wolfVoteCounts[id] || [];
                                 if (wVoters.length > 0) {
-                                    voteHtml = `<span class="status-badge" style="background:#ff3333; color:#fff; margin-left:5px;">🐺 狼印: ${wVoters.length} / ${aliveWolvesCount} 票 (${wVoters.join(', ')})</span>`;
+                                    voteHtml = `<span class="status-badge" style="background:#ff3333; color:#fff; margin-left:5px;">🐺 狼印: ${wVoters.length} / ${aliveWolvesCount} 票</span>`;
                                 }
                             }
 
                             li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
 
-                            // 夜間特技交互按鈕
+                            // 夜間行為操作按鈕
                             if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
                                 if (myRole && myRole.includes("狼人")) {
                                     const killBtn = document.createElement('button');
                                     killBtn.className = "skill-btn";
                                     killBtn.style.background = "#b30000";
-                                    killBtn.innerText = "🔪 隊冧佢";
+                                    killBtn.innerText = "🔪 點選目標";
                                     killBtn.onclick = () => {
                                         set(ref(db, `rooms/${currentRoom}/night_wolf_votes/${myPlayerId}`), id);
                                     };
                                     li.appendChild(killBtn);
+
+                                    // 如果自己點選了這個目標，生成對應的雙重確認鎖定按鈕
+                                    if (nightWolfVotes[myPlayerId] === id) {
+                                        const lockBtn = document.createElement('button');
+                                        lockBtn.className = "skill-btn";
+                                        const hasLocked = nightWolfLocks[myPlayerId] === true;
+                                        lockBtn.style.background = hasLocked ? "#28a745" : "#ffaa00";
+                                        lockBtn.style.color = hasLocked ? "#fff" : "#000";
+                                        lockBtn.innerText = hasLocked ? "✅ 已鎖定目標" : "🔒 鎖定呢個目標";
+                                        lockBtn.onclick = () => {
+                                            set(ref(db, `rooms/${currentRoom}/night_wolf_locks/${myPlayerId}`), true);
+                                        };
+                                        li.appendChild(lockBtn);
+                                    }
                                 }
                                 else if (myRole && myRole.includes("預言家")) {
                                     const checkBtn = document.createElement('button');
@@ -349,8 +360,6 @@
                                         if (hasCheckedTonight) { alert("🚫 每晚只可以驗一個玩家！"); return; }
                                         hasCheckedTonight = true;
                                         alert(`🔮 查驗結果：${playerObj.name} 是 [${playerObj.role}]！`);
-                                        checkBtn.disabled = true;
-                                        checkBtn.style.background = "#555";
                                     };
                                     li.appendChild(checkBtn);
                                 }
@@ -362,7 +371,6 @@
                                     poisonTargetBtn.onclick = () => {
                                         set(ref(db, `rooms/${currentRoom}/night_actions/witch_poison`), id);
                                         set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/hasPoisonPotion`), false);
-                                        alert(`成功調配！今晚將會毒殺 ${playerObj.name}。`);
                                     };
                                     li.appendChild(poisonTargetBtn);
                                 }
@@ -372,11 +380,8 @@
                                 const voteBtn = document.createElement('button');
                                 voteBtn.className = "skill-btn";
                                 voteBtn.style.background = "#ff5500";
-                                voteBtn.style.color = "white";
                                 voteBtn.innerText = "🗳️ 投佢";
-                                voteBtn.onclick = () => {
-                                    set(ref(db, `rooms/${currentRoom}/votes/${myPlayerId}`), id);
-                                };
+                                voteBtn.onclick = () => { set(ref(db, `rooms/${currentRoom}/votes/${myPlayerId}`), id); };
                                 li.appendChild(voteBtn);
                             }
 
@@ -385,7 +390,6 @@
                             if (id === myPlayerId && playerObj.role !== "等待開局...") {
                                 identityCard.style.display = "block";
                                 roleText.innerText = amIDead ? `${myRole} (💀 已陣亡)` : myRole;
-                                if (amIDead) { identityCard.style.background = "#333"; identityCard.style.color = "#888"; }
                             }
                         }
                     });
@@ -396,7 +400,7 @@
                     Object.values(roomData.logs).forEach(logObj => {
                         if (logObj && logObj.text) {
                             const p = document.createElement('p');
-                            p.innerText = logObj.text; p.style.margin = "4px 0";
+                            p.innerText = logObj.text;
                             logBox.appendChild(p);
                         }
                     });
@@ -407,9 +411,6 @@
 
         witchSaveBtn.addEventListener('click', async () => {
             if (!currentRoom) return;
-            const snap = await get(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/hasSavePotion`));
-            if (snap.val() === false) { alert("🚫 你已經冇晒解藥喇！"); return; }
-            
             set(ref(db, `rooms/${currentRoom}/night_actions/witch_save`), true);
             set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/hasSavePotion`), false);
             alert("💊 你已使用全場唯一嘅萬靈解藥！");
@@ -417,10 +418,7 @@
 
         toggleReadyBtn.addEventListener('click', () => {
             if (!currentRoom || !myPlayerId) return;
-            const nextReadyState = !amIReady;
-            set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/ready`), nextReadyState);
-            const username = nameInput.value.trim();
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: nextReadyState ? `👍 ${username} 準備好喇！` : `✋ ${username} 取消咗準備。` });
+            set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/ready`), !amIReady);
         });
 
         startGameBtn.addEventListener('click', async () => {
@@ -437,10 +435,8 @@
             const numWitch = parseInt(document.getElementById('cfg-witch').value) || 0;
             const numVillager = parseInt(document.getElementById('cfg-villager').value) || 0;
 
-            const totalConfigured = numWolf + numSeer + numWitch + numVillager;
-            if (totalConfigured !== totalPlayers) {
-                alert(`❌ 人數不符！你配置嘅身份總數係 ${totalConfigured} 人，但依家間房有 ${totalPlayers} 人。\n請調整到一模一樣先開到局！`);
-                return;
+            if ((numWolf + numSeer + numWitch + numVillager) !== totalPlayers) {
+                alert(`❌ 人數不符！`); return;
             }
 
             let rolesPool = [];
@@ -462,11 +458,10 @@
             });
 
             set(ref(db, `rooms/${currentRoom}/state`), "night");
-            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-            push(logsRef).set({ text: `🎬 房主已自訂配置並確認！遊戲開始！天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
+            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🎬 遊戲開始！天黑請閉眼。` });
         });
 
-        // ☀️ 天光結算中心 (房主點擊：自動判定全體狼人是否意見合一)
+        // 天光結算
         dayBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
@@ -478,23 +473,22 @@
             const actions = roomData.night_actions || {};
             const players = roomData.players || {};
             const nightWolfVotes = roomData.night_wolf_votes || {};
+            const nightWolfLocks = roomData.night_wolf_locks || {};
 
-            // 1. 計算當前存活狼人總數
             let aliveWolvesCount = 0;
             Object.values(players).forEach(p => {
                 if (p.isDead !== true && p.role && p.role.includes("狼人")) aliveWolvesCount++;
             });
 
-            // 2. 統計狼人點票
             const wolfScoreSheet = {};
             Object.values(nightWolfVotes).forEach(targetId => {
                 wolfScoreSheet[targetId] = (wolfScoreSheet[targetId] || 0) + 1;
             });
 
-            // 3. 唯有得票數等於全體生還狼人總數，該目標才算被狼人成功落刀
+            let totalLocksCount = Object.keys(nightWolfLocks).length;
             let wolfTarget = null;
             Object.entries(wolfScoreSheet).forEach(([targetId, count]) => {
-                if (count === aliveWolvesCount && aliveWolvesCount > 0) {
+                if (count === aliveWolvesCount && totalLocksCount === aliveWolvesCount && aliveWolvesCount > 0) {
                     wolfTarget = targetId;
                 }
             });
@@ -506,11 +500,11 @@
             let deadTonightIds = [];
 
             if (wolfTarget && !witchSaved) {
-                deadTonight.push(players[wolfTarget] ? players[wolfTarget].name : "未知玩家");
+                deadTonight.push(players[wolfTarget]?.name || "未知");
                 deadTonightIds.push(wolfTarget);
             }
             if (witchPoisoned) {
-                deadTonight.push(players[witchPoisoned] ? players[witchPoisoned].name : "未知玩家");
+                deadTonight.push(players[witchPoisoned]?.name || "未知");
                 deadTonightIds.push(witchPoisoned);
             }
 
@@ -525,13 +519,12 @@
             });
 
             const nightUpdates = {};
-            
-            deadTonightIds.forEach(deadId => {
-                nightUpdates[`rooms/${currentRoom}/players/${deadId}/isDead`] = true;
-            });
+            deadTonightIds.forEach(deadId => { nightUpdates[`rooms/${currentRoom}/players/${deadId}/isDead`] = true; });
 
+            // 重設夜間所有暫存資料
             nightUpdates[`rooms/${currentRoom}/night_actions`] = null;
             nightUpdates[`rooms/${currentRoom}/night_wolf_votes`] = null; 
+            nightUpdates[`rooms/${currentRoom}/night_wolf_locks`] = null; 
             nightUpdates[`rooms/${currentRoom}/votes`] = null; 
 
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
@@ -540,20 +533,15 @@
 
             const logKey2 = push(logsRef).key;
             if (deadTonight.length === 0) {
-                nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `🕊️ 昨晚是平安夜！無人身亡！（狼人意見不合、空刀或被救）` };
+                nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `🕊️ 昨晚是平安夜！無人身亡！（狼人未確認/鎖定失敗/空刀或被救）` };
             } else {
-                let uniqueDead = [...new Set(deadTonight)];
-                nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `💀 昨晚陣亡的人有：[ ${uniqueDead.join(', ')} ]。` };
+                nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `💀 昨晚陣亡的人有：[ ${[...new Set(deadTonight)].join(', ')} ]。` };
             }
 
             if (aliveWolves === 0) {
                 nightUpdates[`rooms/${currentRoom}/state`] = "ended";
-                const logKey3 = push(logsRef).key;
-                nightUpdates[`rooms/${currentRoom}/logs/${logKey3}`] = { text: `🎉 所有狼人死清光！好人陣營最終勝利！` };
             } else if (aliveWolves >= aliveGoodGuys) {
                 nightUpdates[`rooms/${currentRoom}/state`] = "ended";
-                const logKey3 = push(logsRef).key;
-                nightUpdates[`rooms/${currentRoom}/logs/${logKey3}`] = { text: `🐺 狼人數量已大於或等於好人！狼人陣營獲勝！` };
             } else {
                 nightUpdates[`rooms/${currentRoom}/state`] = "day";
             }
@@ -561,53 +549,33 @@
             await update(ref(db), nightUpdates);
         });
 
-        // 🗳️ 公投點票結算
+        // 公投點票結算
         tallyVotesBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
-
-            const roomRef = ref(db, `rooms/${currentRoom}`);
-            const snap = await get(roomRef);
+            const snap = await get(ref(db, `rooms/${currentRoom}`));
             if (!snap.exists()) return;
 
             const roomData = snap.val();
             const votes = roomData.votes || {};
             const players = roomData.players || {};
 
-            if (Object.keys(votes).length === 0) {
-                alert("🚫 依家全場仲未有人投票，冇得點票結算啊房主！");
-                return;
-            }
+            if (Object.keys(votes).length === 0) { alert("🚫 依家全場仲未有人投票！"); return; }
 
             const scoreSheet = {};
-            Object.values(votes).forEach(targetId => {
-                scoreSheet[targetId] = (scoreSheet[targetId] || 0) + 1;
-            });
+            Object.values(votes).forEach(targetId => { scoreSheet[targetId] = (scoreSheet[targetId] || 0) + 1; });
 
-            let maxVotes = 0;
-            let highestVotedIds = [];
+            let maxVotes = 0; let highestVotedIds = [];
             Object.entries(scoreSheet).forEach(([targetId, count]) => {
-                if (count > maxVotes) {
-                    maxVotes = count;
-                    highestVotedIds = [targetId];
-                } else if (count === maxVotes) {
-                    highestVotedIds.push(targetId);
-                }
+                if (count > maxVotes) { maxVotes = count; highestVotedIds = [targetId]; }
+                else if (count === maxVotes) { highestVotedIds.push(targetId); }
             });
 
-            if (highestVotedIds.length > 1) {
-                const tiedNames = highestVotedIds.map(id => players[id] ? players[id].name : "未知").join(', ');
-                alert(`⚠️ 【同票警告】出現平票！最高得票者有 [ ${tiedNames} ] 各得 ${maxVotes} 票。\n請全場重開討論，進行PK發言並重新投票！`);
-                return;
-            }
+            if (highestVotedIds.length > 1) { alert(`⚠️ 【同票警告】出現平票！請全場重新投票！`); return; }
 
             const exiledId = highestVotedIds[0];
             const exiledPlayer = players[exiledId];
-            if (!exiledPlayer) return;
 
-            if (!confirm(`🗳️ 點票完畢！最高票數為 [${exiledPlayer.name}] (${maxVotes} 票)。\n確定要強制執行處決並推入下一夜嗎？`)) return;
-
-            let aliveWolves = 0;
-            let aliveGoodGuys = 0;
+            let aliveWolves = 0; let aliveGoodGuys = 0;
             Object.entries(players).forEach(([pId, pData]) => {
                 if (pId === exiledId) return; 
                 if (pData.isDead !== true) {
@@ -620,18 +588,12 @@
             dayUpdates[`rooms/${currentRoom}/players/${exiledId}/isDead`] = true;
             dayUpdates[`rooms/${currentRoom}/votes`] = null; 
 
-            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-            const newLogKey = push(logsRef).key;
-
-            if (aliveWolves === 0) {
+            const newLogKey = push(ref(db, `rooms/${currentRoom}/logs`)).key;
+            if (aliveWolves === 0 || aliveWolves >= aliveGoodGuys) {
                 dayUpdates[`rooms/${currentRoom}/state`] = "ended";
-                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被處決！所有狼人已死，好人陣營獲勝！🎉` };
-            } else if (aliveWolves >= aliveGoodGuys) {
-                dayUpdates[`rooms/${currentRoom}/state`] = "ended";
-                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被處決！狼人數量已大於或等於好人，狼人陣營獲勝！🐺` };
             } else {
                 dayUpdates[`rooms/${currentRoom}/state`] = "night"; 
-                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被放逐，真實身份為：[${exiledPlayer.role}]。天黑請閉眼... 🌙` };
+                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ [${exiledPlayer.name}] 被放逐。真實身份為：[${exiledPlayer.role}]。天黑請閉眼... 🌙` };
             }
 
             await update(ref(db), dayUpdates);
@@ -639,15 +601,10 @@
 
         nightBtn.addEventListener('click', () => {
             if (!currentRoom) return;
-            
             const skipUpdates = {};
             skipUpdates[`rooms/${currentRoom}/state`] = "night";
             skipUpdates[`rooms/${currentRoom}/votes`] = null;
-            
-            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-            const newLogKey = push(logsRef).key;
-            skipUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🌙 房主宣告本輪無人出局。黑夜再次降臨，請各陣營秘密行動！` };
-            
+            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🌙 房主宣告本輪無人出局。黑夜再次降臨！` });
             update(ref(db), skipUpdates);
         });
     </script>
