@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.6</title>
+    <title>廣東話狼人殺 v1.7.7</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.6</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.7</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -142,271 +142,286 @@
                 return;
             }
 
-            const roomRef = ref(db, `rooms/${currentRoom}`);
-            const playersRef = ref(db, `rooms/${currentRoom}/players`);
-            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-
-            const snap = await get(playersRef);
-            if (!snap.exists()) {
-                isHost = true;
-                set(ref(db, `rooms/${currentRoom}/state`), "waiting"); 
-            }
-
-            const newPlayerRef = push(playersRef);
-            myPlayerId = newPlayerRef.key; 
-            set(newPlayerRef, { name: username, role: "等待開局...", ready: false, isDead: false });
-
-            push(logsRef).set({ text: `👤 ${username} 塞咗入房喇。` });
-
             joinBtn.disabled = true;
-            joinBtn.innerText = "成功入房";
-            document.getElementById('setup-area').style.display = "none";
-            readyArea.style.display = "block"; 
-            
-            if (isHost) { hostPanel.style.display = "block"; }
+            joinBtn.innerText = "連線中...";
 
-            onValue(roomRef, (snapshot) => {
-                const roomData = snapshot.val();
-                if (!roomData) return;
-
-                const gameState = roomData.state || "waiting";
-                const totalInRoom = roomData.players ? Object.keys(roomData.players).length : 0;
-                const amIDead = roomData.players && roomData.players[myPlayerId] ? roomData.players[myPlayerId].isDead : false;
-
-                playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} 人)：`;
-
-                let readyCount = 0;
-                let aliveWolvesCount = 0;
+            try {
+                const roomStateRef = ref(db, `rooms/${currentRoom}/state`);
+                const stateSnap = await get(roomStateRef);
                 
-                if (roomData.players) {
-                    Object.values(roomData.players).forEach(p => {
-                        if (p.ready === true) readyCount++;
-                        if (p.isDead !== true && p.role && p.role.includes("狼人")) {
-                            aliveWolvesCount++;
+                if (stateSnap.exists() && stateSnap.val() !== "waiting") {
+                    alert("⛔ 依間房嘅遊戲已經開始咗或者結束咗，依家入唔到房！");
+                    joinBtn.disabled = false;
+                    joinBtn.innerText = "進攻間房";
+                    return;
+                }
+
+                const playersRef = ref(db, `rooms/${currentRoom}/players`);
+                const logsRef = ref(db, `rooms/${currentRoom}/logs`);
+                const snap = await get(playersRef);
+                
+                if (!snap.exists()) {
+                    isHost = true;
+                    await set(roomStateRef, "waiting"); 
+                }
+
+                const newPlayerRef = push(playersRef);
+                myPlayerId = newPlayerRef.key; 
+                await set(newPlayerRef, { name: username, role: "等待開局...", ready: false, isDead: false });
+
+                await push(logsRef).set({ text: `👤 ${username} 塞咗入房喇。` });
+
+                joinBtn.innerText = "成功入房";
+                document.getElementById('setup-area').style.display = "none";
+                readyArea.style.display = "block"; 
+                
+                if (isHost) { hostPanel.style.display = "block"; }
+
+                const roomRef = ref(db, `rooms/${currentRoom}`);
+                onValue(roomRef, (snapshot) => {
+                    const roomData = snapshot.val();
+                    if (!roomData) return;
+
+                    const gameState = roomData.state || "waiting";
+                    const totalInRoom = roomData.players ? Object.keys(roomData.players).length : 0;
+                    const amIDead = roomData.players && roomData.players[myPlayerId] ? roomData.players[myPlayerId].isDead : false;
+
+                    playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} 人)：`;
+
+                    let readyCount = 0;
+                    let aliveWolvesCount = 0;
+                    
+                    if (roomData.players) {
+                        Object.values(roomData.players).forEach(p => {
+                            if (p.ready === true) readyCount++;
+                            if (p.isDead !== true && p.role && p.role.includes("狼人")) {
+                                aliveWolvesCount++;
+                            }
+                        });
+                    }
+
+                    if (roomData.players && roomData.players[myPlayerId]) {
+                        myRole = roomData.players[myPlayerId].role;
+                        amIReady = roomData.players[myPlayerId].ready || false;
+                    }
+
+                    // 1. 處理數據
+                    const votesData = roomData.votes || {};
+                    const voteCounts = {}; 
+                    Object.entries(votesData).forEach(([voterId, targetId]) => {
+                        if (roomData.players && roomData.players[voterId]) {
+                            if (!voteCounts[targetId]) voteCounts[targetId] = [];
+                            voteCounts[targetId].push(roomData.players[voterId].name);
                         }
                     });
-                }
 
-                if (roomData.players && roomData.players[myPlayerId]) {
-                    myRole = roomData.players[myPlayerId].role;
-                    amIReady = roomData.players[myPlayerId].ready || false;
-                }
-
-                // 1. 處理數據
-                const votesData = roomData.votes || {};
-                const voteCounts = {}; 
-                Object.entries(votesData).forEach(([voterId, targetId]) => {
-                    if (roomData.players && roomData.players[voterId]) {
-                        if (!voteCounts[targetId]) voteCounts[targetId] = [];
-                        voteCounts[targetId].push(roomData.players[voterId].name);
-                    }
-                });
-
-                const nightWolfVotes = roomData.night_wolf_votes || {};
-                const wolfVoteCounts = {};
-                Object.entries(nightWolfVotes).forEach(([voterId, targetId]) => {
-                    if (roomData.players && roomData.players[voterId]) {
-                        if (!wolfVoteCounts[targetId]) wolfVoteCounts[targetId] = [];
-                        wolfVoteCounts[targetId].push(roomData.players[voterId].name);
-                    }
-                });
-
-                const nightWolfLocks = roomData.night_wolf_locks || {};
-                let totalLocksCount = Object.keys(nightWolfLocks).length;
-
-                // 檢查是否所有生存狼人都投了同一個目標，而且所有生存狼人也點選了確定鎖定
-                let verifiedConsensusTargetId = null;
-                Object.entries(wolfVoteCounts).forEach(([tId, voters]) => {
-                    if (voters.length === aliveWolvesCount && totalLocksCount === aliveWolvesCount && aliveWolvesCount > 0) {
-                        verifiedConsensusTargetId = tId;
-                    }
-                });
-
-                // 2. 狀態切換與介面控制
-                if (gameState === "waiting") {
-                    phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom})`;
-                    readyArea.style.display = "block"; 
-                    witchPanel.style.display = "none";
-                    if (isHost) {
-                        roleConfigArea.style.display = "block"; 
-                        if (totalInRoom >= 2 && readyCount === totalInRoom) {
-                            startGameBtn.style.display = "block";
-                            readySummaryText.innerText = "✅ 全員已準備好！請房主確認身份配置並開局！";
-                        } else {
-                            startGameBtn.style.display = "none";
-                            readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
+                    const nightWolfVotes = roomData.night_wolf_votes || {};
+                    const wolfVoteCounts = {};
+                    Object.entries(nightWolfVotes).forEach(([voterId, targetId]) => {
+                        if (roomData.players && roomData.players[voterId]) {
+                            if (!wolfVoteCounts[targetId]) wolfVoteCounts[targetId] = [];
+                            wolfVoteCounts[targetId].push(roomData.players[voterId].name);
                         }
-                        dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none";
-                    }
+                    });
 
-                } else if (gameState === "night") {
-                    document.body.classList.add('night-mode');
-                    mainContainer.classList.add('night-card');
-                    phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中... 狼人需要投同一人並雙重確認鎖定！";
-                    readyArea.style.display = "none"; 
-                    startGameBtn.style.display = "none";
-                    if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "block"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
+                    const nightWolfLocks = roomData.night_wolf_locks || {};
+                    let totalLocksCount = Object.keys(nightWolfLocks).length;
 
-                    // 女巫秘密魔法藥水面板
-                    if (myRole && myRole.includes("女巫") && !amIDead) {
-                        witchPanel.style.display = "block";
-                        const myWitchData = roomData.players[myPlayerId];
-                        const hasSavePotion = myWitchData.hasSavePotion !== false;
-
-                        witchStatusText.innerText = `剩餘物資：解藥 [${hasSavePotion ? '✅ 有' : '❌ 冇'}] | 毒藥 [${myWitchData.hasPoisonPotion !== false ? '✅ 有' : '❌ 冇'}]`;
-
-                        if (verifiedConsensusTargetId) {
-                            const victimName = roomData.players[verifiedConsensusTargetId] ? roomData.players[verifiedConsensusTargetId].name : "未知玩家";
-                            witchHint.innerText = `🚨 狼人已全體按鍵確認！今晚被殺嘅係：[${victimName}]`;
-                            witchSaveBtn.disabled = !hasSavePotion;
-                        } else {
-                            witchHint.innerText = `⏳ 狼人未達成一致決議或未全體按「鎖定確認」，你睇唔到邊個被殺...`;
-                            witchSaveBtn.disabled = true;
+                    let verifiedConsensusTargetId = null;
+                    Object.entries(wolfVoteCounts).forEach(([tId, voters]) => {
+                        if (voters.length === aliveWolvesCount && totalLocksCount === aliveWolvesCount && aliveWolvesCount > 0) {
+                            verifiedConsensusTargetId = tId;
                         }
-                    } else { witchPanel.style.display = "none"; }
+                    });
 
-                } else if (gameState === "day") {
-                    document.body.classList.remove('night-mode');
-                    mainContainer.classList.remove('night-card');
-                    phaseStatus.innerText = "☀️ 【天光請睜眼】請全場自由討論，並點擊下方按鈕投票！";
-                    readyArea.style.display = "none";
-                    startGameBtn.style.display = "none";
-                    witchPanel.style.display = "none";
-                    hasCheckedTonight = false; 
-                    if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "none"; tallyVotesBtn.style.display = "block"; nightBtn.style.display = "block"; }
-                
-                } else if (gameState === "ended") {
-                    document.body.classList.remove('night-mode');
-                    mainContainer.classList.remove('night-card');
-                    phaseStatus.innerText = "🏆 遊戲已經結束！";
-                    readyArea.style.display = "none";
-                    startGameBtn.style.display = "none";
-                    witchPanel.style.display = "none";
-                }
-
-                // 3. 渲染玩家列表
-                playerList.innerHTML = '';
-                if (roomData.players) {
-                    if (roomData.players[myPlayerId]) {
-                        toggleReadyBtn.innerText = amIReady ? "✅ 你已準備就緒" : "✋ 點擊準備就緒";
-                    }
-
-                    Object.entries(roomData.players).forEach(([id, playerObj]) => {
-                        if (playerObj && playerObj.name) {
-                            const li = document.createElement('li');
-                            let statusHtml = "";
-                            let voteHtml = "";
-                            const isDead = playerObj.isDead === true;
-                            
-                            if (isDead) {
-                                statusHtml = `<span class="status-badge" style="background:#555; color:#e50914;">💀 已陣亡</span>`;
-                                li.style.opacity = "0.4"; 
-                                li.style.textDecoration = "line-through";
-                            } else if (gameState === "waiting") {
-                                statusHtml = playerObj.ready ? `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
+                    // 2. 狀態切換與介面控制
+                    if (gameState === "waiting") {
+                        phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom})`;
+                        readyArea.style.display = "block"; 
+                        witchPanel.style.display = "none";
+                        if (isHost) {
+                            roleConfigArea.style.display = "block"; 
+                            if (totalInRoom >= 2 && readyCount === totalInRoom) {
+                                startGameBtn.style.display = "block";
+                                readySummaryText.innerText = "✅ 全員已準備好！請房主確認身份配置並開局！";
                             } else {
-                                statusHtml = `<span style="color:#aaa;">[🔒 身份隱藏]</span>`;
+                                startGameBtn.style.display = "none";
+                                readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
                             }
+                            dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none";
+                        }
 
-                            if (gameState === "day" && !isDead) {
-                                const voters = voteCounts[id] || [];
-                                if (voters.length > 0) {
-                                    voteHtml = `<span class="status-badge" style="background:#ffaa00; color:#000; margin-left:5px;">🗳️ ${voters.length} 票</span>`;
+                    } else if (gameState === "night") {
+                        document.body.classList.add('night-mode');
+                        mainContainer.classList.add('night-card');
+                        phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中... 狼人需要投同一人並雙重確認鎖定！";
+                        readyArea.style.display = "none"; 
+                        startGameBtn.style.display = "none";
+                        if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "block"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
+
+                        if (myRole && myRole.includes("女巫") && !amIDead) {
+                            witchPanel.style.display = "block";
+                            const myWitchData = roomData.players[myPlayerId];
+                            const hasSavePotion = myWitchData.hasSavePotion !== false;
+
+                            witchStatusText.innerText = `剩餘物資：解藥 [${hasSavePotion ? '✅ 有' : '❌ 冇'}] | 毒藥 [${myWitchData.hasPoisonPotion !== false ? '✅ 有' : '❌ 冇'}]`;
+
+                            if (verifiedConsensusTargetId) {
+                                const victimName = roomData.players[verifiedConsensusTargetId] ? roomData.players[verifiedConsensusTargetId].name : "未知玩家";
+                                witchHint.innerText = `🚨 狼人已全體按鍵確認！今晚被殺嘅係：[${victimName}]`;
+                                witchSaveBtn.disabled = !hasSavePotion;
+                            } else {
+                                witchHint.innerText = `⏳ 狼人未達成一致決議或未全體按「鎖定確認」，你睇唔到邊個被殺...`;
+                                witchSaveBtn.disabled = true;
+                            }
+                        } else { witchPanel.style.display = "none"; }
+
+                    } else if (gameState === "day") {
+                        document.body.classList.remove('night-mode');
+                        mainContainer.classList.remove('night-card');
+                        phaseStatus.innerText = "☀️ 【天光請睜眼】請全場自由討論，並點擊下方按鈕投票！";
+                        readyArea.style.display = "none";
+                        startGameBtn.style.display = "none";
+                        witchPanel.style.display = "none";
+                        hasCheckedTonight = false; 
+                        if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "none"; tallyVotesBtn.style.display = "block"; nightBtn.style.display = "block"; }
+                    
+                    } else if (gameState === "ended") {
+                        document.body.classList.remove('night-mode');
+                        mainContainer.classList.remove('night-card');
+                        phaseStatus.innerText = "🏆 遊戲已經結束！";
+                        readyArea.style.display = "none";
+                        startGameBtn.style.display = "none";
+                        witchPanel.style.display = "none";
+                    }
+
+                    // 3. 渲染玩家列表
+                    playerList.innerHTML = '';
+                    if (roomData.players) {
+                        if (roomData.players[myPlayerId]) {
+                            toggleReadyBtn.innerText = amIReady ? "✅ 你已準備就緒" : "✋ 點擊準備就緒";
+                        }
+
+                        Object.entries(roomData.players).forEach(([id, playerObj]) => {
+                            if (playerObj && playerObj.name) {
+                                const li = document.createElement('li');
+                                let statusHtml = "";
+                                let voteHtml = "";
+                                const isDead = playerObj.isDead === true;
+                                
+                                if (isDead) {
+                                    statusHtml = `<span class="status-badge" style="background:#555; color:#e50914;">💀 已陣亡</span>`;
+                                    li.style.opacity = "0.4"; 
+                                    li.style.textDecoration = "line-through";
+                                } else if (gameState === "waiting") {
+                                    statusHtml = playerObj.ready ? `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
+                                } else {
+                                    statusHtml = `<span style="color:#aaa;">[🔒 身份隱藏]</span>`;
                                 }
-                            }
 
-                            // 狼人夜間即時戰報與狀態顯示
-                            if (gameState === "night" && !isDead && myRole && myRole.includes("狼人") && !amIDead) {
-                                const wVoters = wolfVoteCounts[id] || [];
-                                if (wVoters.length > 0) {
-                                    voteHtml = `<span class="status-badge" style="background:#ff3333; color:#fff; margin-left:5px;">🐺 狼印: ${wVoters.length} / ${aliveWolvesCount} 票</span>`;
-                                }
-                            }
-
-                            li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
-
-                            // 夜間行為操作按鈕
-                            if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
-                                if (myRole && myRole.includes("狼人")) {
-                                    const killBtn = document.createElement('button');
-                                    killBtn.className = "skill-btn";
-                                    killBtn.style.background = "#b30000";
-                                    killBtn.innerText = "🔪 點選目標";
-                                    killBtn.onclick = () => {
-                                        set(ref(db, `rooms/${currentRoom}/night_wolf_votes/${myPlayerId}`), id);
-                                    };
-                                    li.appendChild(killBtn);
-
-                                    // 如果自己點選了這個目標，生成對應的雙重確認鎖定按鈕
-                                    if (nightWolfVotes[myPlayerId] === id) {
-                                        const lockBtn = document.createElement('button');
-                                        lockBtn.className = "skill-btn";
-                                        const hasLocked = nightWolfLocks[myPlayerId] === true;
-                                        lockBtn.style.background = hasLocked ? "#28a745" : "#ffaa00";
-                                        lockBtn.style.color = hasLocked ? "#fff" : "#000";
-                                        lockBtn.innerText = hasLocked ? "✅ 已鎖定目標" : "🔒 鎖定呢個目標";
-                                        lockBtn.onclick = () => {
-                                            set(ref(db, `rooms/${currentRoom}/night_wolf_locks/${myPlayerId}`), true);
-                                        };
-                                        li.appendChild(lockBtn);
+                                if (gameState === "day" && !isDead) {
+                                    const voters = voteCounts[id] || [];
+                                    if (voters.length > 0) {
+                                        voteHtml = `<span class="status-badge" style="background:#ffaa00; color:#000; margin-left:5px;">🗳️ ${voters.length} 票</span>`;
                                     }
                                 }
-                                else if (myRole && myRole.includes("預言家")) {
-                                    const checkBtn = document.createElement('button');
-                                    checkBtn.className = "skill-btn";
-                                    checkBtn.style.background = "#00abc5";
-                                    checkBtn.innerText = "👁️ 查驗";
-                                    checkBtn.onclick = () => {
-                                        if (hasCheckedTonight) { alert("🚫 每晚只可以驗一個玩家！"); return; }
-                                        hasCheckedTonight = true;
-                                        alert(`🔮 查驗結果：${playerObj.name} 是 [${playerObj.role}]！`);
-                                    };
-                                    li.appendChild(checkBtn);
+
+                                if (gameState === "night" && !isDead && myRole && myRole.includes("狼人") && !amIDead) {
+                                    const wVoters = wolfVoteCounts[id] || [];
+                                    if (wVoters.length > 0) {
+                                        voteHtml = `<span class="status-badge" style="background:#ff3333; color:#fff; margin-left:5px;">🐺 狼印: ${wVoters.length} / ${aliveWolvesCount} 票</span>`;
+                                    }
                                 }
-                                else if (myRole && myRole.includes("女巫") && roomData.players[myPlayerId].hasPoisonPotion !== false) {
-                                    const poisonTargetBtn = document.createElement('button');
-                                    poisonTargetBtn.className = "skill-btn";
-                                    poisonTargetBtn.style.background = "#ba55d3";
-                                    poisonTargetBtn.innerText = "🧪 餵毒藥";
-                                    poisonTargetBtn.onclick = () => {
-                                        set(ref(db, `rooms/${currentRoom}/night_actions/witch_poison`), id);
-                                        set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/hasPoisonPotion`), false);
-                                    };
-                                    li.appendChild(poisonTargetBtn);
+
+                                li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
+
+                                if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
+                                    if (myRole && myRole.includes("狼人")) {
+                                        const killBtn = document.createElement('button');
+                                        killBtn.className = "skill-btn";
+                                        killBtn.style.background = "#b30000";
+                                        killBtn.innerText = "🔪 點選目標";
+                                        killBtn.onclick = () => {
+                                            set(ref(db, `rooms/${currentRoom}/night_wolf_votes/${myPlayerId}`), id);
+                                        };
+                                        li.appendChild(killBtn);
+
+                                        if (nightWolfVotes[myPlayerId] === id) {
+                                            const lockBtn = document.createElement('button');
+                                            lockBtn.className = "skill-btn";
+                                            const hasLocked = nightWolfLocks[myPlayerId] === true;
+                                            lockBtn.style.background = hasLocked ? "#28a745" : "#ffaa00";
+                                            lockBtn.style.color = hasLocked ? "#fff" : "#000";
+                                            lockBtn.innerText = hasLocked ? "✅ 已鎖定目標" : "🔒 鎖定呢個目標";
+                                            lockBtn.onclick = () => {
+                                                set(ref(db, `rooms/${currentRoom}/night_wolf_locks/${myPlayerId}`), true);
+                                            };
+                                            li.appendChild(lockBtn);
+                                        }
+                                    }
+                                    else if (myRole && myRole.includes("預言家")) {
+                                        const checkBtn = document.createElement('button');
+                                        checkBtn.className = "skill-btn";
+                                        checkBtn.style.background = "#00abc5";
+                                        checkBtn.innerText = "👁️ 查驗";
+                                        checkBtn.onclick = () => {
+                                            if (hasCheckedTonight) { alert("🚫 每晚只可以驗一個玩家！"); return; }
+                                            hasCheckedTonight = true;
+                                            alert(`🔮 查驗結果：${playerObj.name} 是 [${playerObj.role}]！`);
+                                        };
+                                        li.appendChild(checkBtn);
+                                    }
+                                    else if (myRole && myRole.includes("女巫") && roomData.players[myPlayerId].hasPoisonPotion !== false) {
+                                        const poisonTargetBtn = document.createElement('button');
+                                        poisonTargetBtn.className = "skill-btn";
+                                        poisonTargetBtn.style.background = "#ba55d3";
+                                        poisonTargetBtn.innerText = "🧪 餵毒藥";
+                                        poisonTargetBtn.onclick = () => {
+                                            set(ref(db, `rooms/${currentRoom}/night_actions/witch_poison`), id);
+                                            set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/hasPoisonPotion`), false);
+                                        };
+                                        li.appendChild(poisonTargetBtn);
+                                    }
+                                }
+
+                                if (gameState === "day" && id !== myPlayerId && !isDead && !amIDead) {
+                                    const voteBtn = document.createElement('button');
+                                    voteBtn.className = "skill-btn";
+                                    voteBtn.style.background = "#ff5500";
+                                    voteBtn.innerText = "🗳️ 投佢";
+                                    voteBtn.onclick = () => { set(ref(db, `rooms/${currentRoom}/votes/${myPlayerId}`), id); };
+                                    li.appendChild(voteBtn);
+                                }
+
+                                playerList.appendChild(li);
+
+                                if (id === myPlayerId && playerObj.role !== "等待開局...") {
+                                    identityCard.style.display = "block";
+                                    roleText.innerText = amIDead ? `${myRole} (💀 已陣亡)` : myRole;
                                 }
                             }
+                        });
+                    }
 
-                            if (gameState === "day" && id !== myPlayerId && !isDead && !amIDead) {
-                                const voteBtn = document.createElement('button');
-                                voteBtn.className = "skill-btn";
-                                voteBtn.style.background = "#ff5500";
-                                voteBtn.innerText = "🗳️ 投佢";
-                                voteBtn.onclick = () => { set(ref(db, `rooms/${currentRoom}/votes/${myPlayerId}`), id); };
-                                li.appendChild(voteBtn);
+                    logBox.innerHTML = '';
+                    if (roomData.logs) {
+                        Object.values(roomData.logs).forEach(logObj => {
+                            if (logObj && logObj.text) {
+                                const p = document.createElement('p');
+                                p.innerText = logObj.text;
+                                logBox.appendChild(p);
                             }
+                        });
+                    }
+                    logBox.scrollTop = logBox.scrollHeight;
+                });
 
-                            playerList.appendChild(li);
-
-                            if (id === myPlayerId && playerObj.role !== "等待開局...") {
-                                identityCard.style.display = "block";
-                                roleText.innerText = amIDead ? `${myRole} (💀 已陣亡)` : myRole;
-                            }
-                        }
-                    });
-                }
-
-                logBox.innerHTML = '';
-                if (roomData.logs) {
-                    Object.values(roomData.logs).forEach(logObj => {
-                        if (logObj && logObj.text) {
-                            const p = document.createElement('p');
-                            p.innerText = logObj.text;
-                            logBox.appendChild(p);
-                        }
-                    });
-                }
-                logBox.scrollTop = logBox.scrollHeight;
-            });
+            } catch (error) {
+                console.error("Firebase Connection Error:", error);
+                alert("🚫 連接數據庫失敗，請檢查網絡或重試！(Error: " + error.message + ")");
+                joinBtn.disabled = false;
+                joinBtn.innerText = "進攻間房";
+            }
         });
 
         witchSaveBtn.addEventListener('click', async () => {
@@ -521,7 +536,6 @@
             const nightUpdates = {};
             deadTonightIds.forEach(deadId => { nightUpdates[`rooms/${currentRoom}/players/${deadId}/isDead`] = true; });
 
-            // 重設夜間所有暫存資料
             nightUpdates[`rooms/${currentRoom}/night_actions`] = null;
             nightUpdates[`rooms/${currentRoom}/night_wolf_votes`] = null; 
             nightUpdates[`rooms/${currentRoom}/night_wolf_locks`] = null; 
