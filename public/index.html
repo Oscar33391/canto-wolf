@@ -100,6 +100,9 @@
         let hasSavePotion = true;
         let hasPoisonPotion = true;
 
+        // 預言家每晚只能驗一次人的狀態控制
+        let hasCheckedTonight = false;
+
         const nameInput = document.getElementById('nameInput');
         const roomInput = document.getElementById('roomInput');
         const joinBtn = document.getElementById('joinBtn');
@@ -224,6 +227,9 @@
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
                     
+                    // 重置預言家的技能狀態，準備迎接下一個黑夜
+                    hasCheckedTonight = false; 
+                    
                     if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "block"; }
                 }
 
@@ -259,14 +265,13 @@
 
                             li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml}</span>`;
 
-                            // 🚨 秘密黑夜技能操作（不再發公眾 Log，改寫入秘密對局區）
+                            // 🚨 秘密黑夜技能操作
                             if (gameState === "night" && id !== myPlayerId) {
                                 if (myRole && myRole.includes("狼人")) {
                                     const killBtn = document.createElement('button');
                                     killBtn.className = "skill-btn";
                                     killBtn.innerText = "🔪 隊冧佢";
                                     killBtn.onclick = () => {
-                                        // 秘密寫入，不寫入公眾 logs 穿煲
                                         set(ref(db, `rooms/${currentRoom}/night_actions/wolf_target`), id);
                                         alert(`你已秘密投票今晚殺死 ${playerObj.name}！`);
                                     };
@@ -277,7 +282,16 @@
                                     checkBtn.className = "skill-btn";
                                     checkBtn.style.background = "#00abc5";
                                     checkBtn.innerText = "👁️ 查驗";
-                                    checkBtn.onclick = () => alert(`🔮 查驗結果：${playerObj.name} 的真實身份是 [${playerObj.role}]！`);
+                                    checkBtn.onclick = () => {
+                                        if (hasCheckedTonight) {
+                                            alert("🚫 喂阿哥，你今晚已經驗過人啦！每晚只可以驗一個！");
+                                            return;
+                                        }
+                                        hasCheckedTonight = true;
+                                        alert(`🔮 查驗結果：${playerObj.name} 的真實身份是 [${playerObj.role}]！`);
+                                        checkBtn.disabled = true;
+                                        checkBtn.style.background = "#555";
+                                    };
                                     li.appendChild(checkBtn);
                                 }
                                 // 女巫毒人按鈕
@@ -339,7 +353,7 @@
             push(logsRef).set({ text: nextReadyState ? `👍 ${username} 準備好喇！` : `✋ ${username} 取消咗準備。` });
         });
 
-        // 🎬 房主開局（重新定義牌組：引入女巫 🧙‍♀️）
+        // 🎬 房主開局
         startGameBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
