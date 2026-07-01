@@ -3,21 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 - 測試版</title>
+    <title>廣東話狼人殺 - Firebase版</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 30px; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         input { width: 80%; padding: 10px; margin: 10px 0; border-radius: 4px; border: 1px solid #333; background: #2c2c2c; color: #fff; font-size: 16px; }
         button { width: 85%; padding: 12px; background: #e50914; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px; }
-        button:hover { background: #ff1f29; }
-        #log-box { width: 85%; height: 200px; background: #000; margin: 20px auto; padding: 10px; border-radius: 4px; text-align: left; overflow-y: auto; font-family: monospace; color: #00ff00; border: 1px solid #333; }
+        #log-box { width: 85%; height: 200px; background: #000; margin: 20px auto; padding: 10px; border-radius: 4px; text-align: left; overflow-y: auto; font-family: monospace; color: #00ff00; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h2>🐺 廣東話狼人殺 Phase 1</h2>
-        <p>測試即時連線房</p>
+        <p>測試 Firebase 即時連線</p>
         
         <input type="text" id="nameInput" placeholder="打你嘅大名 (e.g. 鴨寮街預言家)">
         <input type="text" id="roomInput" placeholder="入房號碼 (e.g. RM999)">
@@ -27,44 +26,62 @@
         <div id="log-box"></div>
     </div>
 
-    <!-- 呢行好重要，Socket.io 會自動喺背後提供呢個檔案，唔使自己擺入去 -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // 經已自動幫你注入你嘅專屬 Config 🔑
+        const firebaseConfig = {
+            apiKey: "AIzaSyD5Aoi4sTvkfSr7B5mkpovRgs3hK3EXO44",
+            authDomain: "canto-wolf-db.firebaseapp.com",
+            databaseURL: "https://canto-wolf-db-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "canto-wolf-db",
+            storageBucket: "canto-wolf-db.firebasestorage.app",
+            messagingSenderId: "72589991225",
+            appId: "1:72589991225:web:a95b8e9b52675d465a5ce8",
+            measurementId: "G-VRSPGVTZFC"
+        };
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
         const nameInput = document.getElementById('nameInput');
         const roomInput = document.getElementById('roomInput');
         const joinBtn = document.getElementById('joinBtn');
         const logBox = document.getElementById('log-box');
 
-        // 撳掣嗰陣將名同房號傳比後端
         joinBtn.addEventListener('click', () => {
             const username = nameInput.value.trim();
-            const roomCode = roomInput.value.trim();
+            const roomCode = roomInput.value.trim().toUpperCase();
 
             if (!username || !roomCode) {
-                alert('唔該入埋名同房號先啦師兄！');
+                alert('填埋個名同房號先啦，師兄！');
                 return;
             }
 
-            // 發射訊號比 Server
-            socket.emit('joinRoom', { username, roomCode });
+            // 1. 指定資料庫路徑：/rooms/房號/logs
+            const roomLogRef = ref(db, `rooms/${roomCode}/logs`);
             
-            // 撳完之後鎖住唔好俾佢再撳
-            joinBtn.disabled = true;
-            joinBtn.innerText = "連線中...";
-            joinBtn.style.background = "#555";
-        });
+            // 2. 推送新數據入資料庫 (向房內廣播)
+            const newLogRef = push(roomLogRef);
+            set(newLogRef, {
+                text: `👤 ${username} 成功塞咗入嚟房間 [${roomCode}] 喇！`
+            });
 
-        // 聽 Server 廣播返過嚟嘅動態訊息
-        socket.on('newMessage', (msg) => {
-            const p = document.createElement('p');
-            p.innerText = msg;
-            p.style.margin = "4px 0";
-            logBox.appendChild(p);
-            
-            // 全自動碌到最底睇最新消息
-            logBox.scrollTop = logBox.scrollHeight;
+            // 3. 監聽呢間房：只要雲端有一丁點風吹草動，即時彈出畫面
+            onChildAdded(roomLogRef, (snapshot) => {
+                const logData = snapshot.val();
+                const p = document.createElement('p');
+                p.innerText = logData.text;
+                p.style.margin = "4px 0";
+                logBox.appendChild(p);
+                logBox.scrollTop = logBox.scrollHeight;
+            });
+
+            joinBtn.disabled = true;
+            joinBtn.innerText = "已成功入房";
+            joinBtn.style.background = "#444";
         });
     </script>
 </body>
