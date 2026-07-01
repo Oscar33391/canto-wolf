@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.1</title>
+    <title>廣東話狼人殺 v1.7.2</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -20,8 +20,8 @@
         #player-box { width: 85%; background: #2a2a2a; margin: 15px auto; padding: 10px; border-radius: 4px; text-align: left; border-left: 5px solid #e50914; }
         #log-box { width: 85%; height: 120px; background: #000; margin: 15px auto; padding: 10px; border-radius: 4px; text-align: left; overflow-y: auto; font-family: monospace; color: #00ff00; }
         ul { list-style: none; padding: 0; margin: 0; }
-        li { padding: 5px 0; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
-        .skill-btn { width: auto; padding: 4px 10px; font-size: 12px; background: #0077ff; margin: 0; margin-left: 5px; }
+        li { padding: 5px 0; font-size: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .skill-btn { width: auto; padding: 4px 10px; font-size: 12px; background: #0077ff; margin: 2px; }
         .status-badge { font-size: 12px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         
         #witch-panel { width: 85%; background: #4b0082; margin: 10px auto; padding: 10px; border-radius: 4px; border: 2px solid #da70d6; text-align: left; display: none; }
@@ -30,7 +30,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.1</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.2</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -59,7 +59,8 @@
             <p style="margin: 0 0 5px 0; font-size: 14px; color: #28a745; font-weight: bold;">👑 房主控制面板</p>
             <button id="startGameBtn" style="background: #28a745; display: none;">🎬 全員準備就緒！點擊確認開局</button>
             <button id="dayBtn" style="background: #28a745; display: none;">☀️ 叫醒所有人（天光結算）</button>
-            <button id="nightBtn" style="background: #1f2833; border: 2px solid #45f3ff; color: #45f3ff; display: none;">🌙 天黑請閉眼（入夜）</button>
+            <button id="tallyVotesBtn" style="background: #ffaa00; color: #000; display: none;">🗳️ 點票並公投處決最高票者</button>
+            <button id="nightBtn" style="background: #1f2833; border: 2px solid #45f3ff; color: #45f3ff; display: none;">🌙 冇人出局直接入夜</button>
         </div>
 
         <h3 id="player-count-title">👥 間房有邊個：</h3>
@@ -103,6 +104,7 @@
         const readySummaryText = document.getElementById('ready-summary-text');
         const startGameBtn = document.getElementById('startGameBtn');
         const dayBtn = document.getElementById('dayBtn');
+        const tallyVotesBtn = document.getElementById('tallyVotesBtn');
         const nightBtn = document.getElementById('nightBtn');
         const hostPanel = document.getElementById('host-panel');
         const playerList = document.getElementById('playerList');
@@ -180,7 +182,7 @@
                         startGameBtn.style.display = "none";
                         readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
                     }
-                    if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "none"; }
+                    if (isHost) { dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
 
                 } else if (gameState === "night") {
                     document.body.classList.add('night-mode');
@@ -188,7 +190,7 @@
                     phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中...";
                     readyArea.style.display = "none"; 
                     startGameBtn.style.display = "none";
-                    if (isHost) { dayBtn.style.display = "block"; nightBtn.style.display = "none"; }
+                    if (isHost) { dayBtn.style.display = "block"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
 
                     if (myRole && myRole.includes("女巫") && !amIDead) {
                         witchPanel.style.display = "block";
@@ -213,12 +215,12 @@
                 } else if (gameState === "day") {
                     document.body.classList.remove('night-mode');
                     mainContainer.classList.remove('night-card');
-                    phaseStatus.innerText = "☀️ 【天光請睜眼】請全場自由討論與投票！";
+                    phaseStatus.innerText = "☀️ 【天光請睜眼】請全場自由討論，並點擊下方按鈕投票！";
                     readyArea.style.display = "none";
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
                     hasCheckedTonight = false; 
-                    if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "block"; }
+                    if (isHost) { dayBtn.style.display = "none"; tallyVotesBtn.style.display = "block"; nightBtn.style.display = "block"; }
                 
                 } else if (gameState === "ended") {
                     document.body.classList.remove('night-mode');
@@ -227,10 +229,20 @@
                     readyArea.style.display = "none";
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
-                    if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "none"; }
+                    if (isHost) { dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
                 }
 
-                // 2. 渲染玩家列表與動態技能掣
+                // 2. 預先處理白天公投數據
+                const votesData = roomData.votes || {};
+                const voteCounts = {}; // targetPlayerId -> Array of voter names
+                Object.entries(votesData).forEach(([voterId, targetId]) => {
+                    if (roomData.players && roomData.players[voterId]) {
+                        if (!voteCounts[targetId]) voteCounts[targetId] = [];
+                        voteCounts[targetId].push(roomData.players[voterId].name);
+                    }
+                });
+
+                // 3. 渲染玩家列表
                 playerList.innerHTML = '';
                 if (roomData.players) {
                     if (roomData.players[myPlayerId]) {
@@ -244,6 +256,7 @@
                         if (playerObj && playerObj.name) {
                             const li = document.createElement('li');
                             let statusHtml = "";
+                            let voteHtml = "";
                             const isDead = playerObj.isDead === true;
                             
                             if (isDead) {
@@ -257,9 +270,17 @@
                                 statusHtml = `<span style="color:#aaa;">[${displayRole}]</span>`;
                             }
 
-                            li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml}</span>`;
+                            // 如果是白天，實時把得票及投票者清單塞進標籤
+                            if (gameState === "day" && !isDead) {
+                                const voters = voteCounts[id] || [];
+                                if (voters.length > 0) {
+                                    voteHtml = `<span class="status-badge" style="background:#ffaa00; color:#000; margin-left:5px;">🗳️ ${voters.length} 票 (${voters.join(', ')})</span>`;
+                                }
+                            }
 
-                            // 黑夜行動按鈕
+                            li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
+
+                            // 🌙 黑夜行動按鈕
                             if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
                                 if (myRole && myRole.includes("狼人")) {
                                     const killBtn = document.createElement('button');
@@ -299,50 +320,17 @@
                                 }
                             }
 
-                            // 白天公投處決按鈕
-                            if (gameState === "day" && isHost && !isDead) {
-                                const exileBtn = document.createElement('button');
-                                exileBtn.className = "skill-btn";
-                                exileBtn.style.background = "#ff5500";
-                                exileBtn.innerText = "🗳️ 公投處決";
-                                exileBtn.onclick = async () => {
-                                    if (!confirm(`確定要根據全場投票結果，處決玩家 [${playerObj.name}] 嗎？`)) return;
-
-                                    const freshSnap = await get(ref(db, `rooms/${currentRoom}`));
-                                    if (!freshSnap.exists()) return;
-                                    const rData = freshSnap.val();
-                                    const currentPlayers = rData.players || {};
-
-                                    currentPlayers[id].isDead = true; 
-
-                                    let aliveWolves = 0;
-                                    let aliveGoodGuys = 0;
-                                    Object.entries(currentPlayers).forEach(([pId, pData]) => {
-                                        if (pData.isDead !== true) {
-                                            if (pData.role && pData.role.includes("狼人")) aliveWolves++;
-                                            else aliveGoodGuys++;
-                                        }
-                                    });
-
-                                    const dayUpdates = {};
-                                    dayUpdates[`rooms/${currentRoom}/players/${id}/isDead`] = true;
-                                    
-                                    const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-                                    const newLogKey = push(logsRef).key;
-
-                                    if (aliveWolves === 0) {
-                                        dayUpdates[`rooms/${currentRoom}/state`] = "ended";
-                                        dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投】[${playerObj.name}] 被投票處決！所有狼人已死，好人陣營獲勝！🎉` };
-                                    } else if (aliveWolves >= aliveGoodGuys) {
-                                        dayUpdates[`rooms/${currentRoom}/state`] = "ended";
-                                        dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投】[${playerObj.name}] 被投票處決！狼人數量已大於或等於好人，狼人陣營獲勝！🐺` };
-                                    } else {
-                                        dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投】[${playerObj.name}] 被全場投票處決，翻牌真實身份為：[${playerObj.role}]。` };
-                                    }
-
-                                    update(ref(db), dayUpdates);
+                            // ☀️ 【全新功能】白天玩家公投按鈕 (活人能投給除了自己以外的活人)
+                            if (gameState === "day" && id !== myPlayerId && !isDead && !amIDead) {
+                                const voteBtn = document.createElement('button');
+                                voteBtn.className = "skill-btn";
+                                voteBtn.style.background = "#ff5500";
+                                voteBtn.style.color = "white";
+                                voteBtn.innerText = "🗳️ 投佢";
+                                voteBtn.onclick = () => {
+                                    set(ref(db, `rooms/${currentRoom}/votes/${myPlayerId}`), id);
                                 };
-                                li.appendChild(exileBtn);
+                                li.appendChild(voteBtn);
                             }
 
                             playerList.appendChild(li);
@@ -356,7 +344,7 @@
                     });
                 }
 
-                // 3. 更新日誌
+                // 4. 更新日誌
                 logBox.innerHTML = '';
                 if (roomData.logs) {
                     Object.values(roomData.logs).forEach(logObj => {
@@ -422,7 +410,7 @@
             push(logsRef).set({ text: `🎬 房主已確認！遊戲開始！天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
         });
 
-        // ☀️ 天光結算中心
+        // ☀️ 天光結算中心 (從黑夜進入白天)
         dayBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
@@ -450,7 +438,6 @@
                 deadTonightIds.push(witchPoisoned);
             }
 
-            // 計算最新剩餘人數
             let aliveWolves = 0;
             let aliveGoodGuys = 0;
             Object.entries(players).forEach(([pId, pData]) => {
@@ -461,18 +448,15 @@
                 }
             });
 
-            // 🛠️ 【核心修復】建立原子更新物件，將 night_actions 直接設為 null 徹底杜絕 race condition
             const nightUpdates = {};
             
-            // 標記死者
             deadTonightIds.forEach(deadId => {
                 nightUpdates[`rooms/${currentRoom}/players/${deadId}/isDead`] = true;
             });
 
-            // 徹底清除黑夜秘密行動數據，阻斷不死身 Bug
             nightUpdates[`rooms/${currentRoom}/night_actions`] = null;
+            nightUpdates[`rooms/${currentRoom}/votes`] = null; // 進入白天前必先清空上一輪投票資料
 
-            // 生成結算日誌
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
             const logKey1 = push(logsRef).key;
             nightUpdates[`rooms/${currentRoom}/logs/${logKey1}`] = { text: `☀️ 【天亮了】昨晚驚心動魄...` };
@@ -485,7 +469,6 @@
                 nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `💀 昨晚陣亡的人有：[ ${uniqueDead.join(', ')} ]。` };
             }
 
-            // 判斷遊戲勝負
             if (aliveWolves === 0) {
                 nightUpdates[`rooms/${currentRoom}/state`] = "ended";
                 const logKey3 = push(logsRef).key;
@@ -498,15 +481,102 @@
                 nightUpdates[`rooms/${currentRoom}/state`] = "day";
             }
 
-            // 一次過寫入雲端
             await update(ref(db), nightUpdates);
         });
 
-        // 🌙 入夜
+        // 🗳️ 【全新功能】智能公投點票算法中心
+        tallyVotesBtn.addEventListener('click', async () => {
+            if (!currentRoom || !isHost) return;
+
+            const roomRef = ref(db, `rooms/${currentRoom}`);
+            const snap = await get(roomRef);
+            if (!snap.exists()) return;
+
+            const roomData = snap.val();
+            const votes = roomData.votes || {};
+            const players = roomData.players || {};
+
+            if (Object.keys(votes).length === 0) {
+                alert("🚫 依家全場仲未有人投票，冇得點票結算啊房主！");
+                return;
+            }
+
+            // 1. 計算每位玩家所得票數
+            const scoreSheet = {};
+            Object.values(votes).forEach(targetId => {
+                scoreSheet[targetId] = (scoreSheet[targetId] || 0) + 1;
+            });
+
+            // 2. 尋找最高票數的玩家
+            let maxVotes = 0;
+            let highestVotedIds = [];
+            Object.entries(scoreSheet).forEach(([targetId, count]) => {
+                if (count > maxVotes) {
+                    maxVotes = count;
+                    highestVotedIds = [targetId];
+                } else if (count === maxVotes) {
+                    highestVotedIds.push(targetId);
+                }
+            });
+
+            // 3. 安全防禦：處理同票打和局狀況
+            if (highestVotedIds.length > 1) {
+                const tiedNames = highestVotedIds.map(id => players[id] ? players[id].name : "未知").join(', ');
+                alert(`⚠️ 【同票警告】出現平票！最高得票者有 [ ${tiedNames} ] 各得 ${maxVotes} 票。\n請全場重開討論，進行PK發言並重新投票！`);
+                return;
+            }
+
+            const exiledId = highestVotedIds[0];
+            const exiledPlayer = players[exiledId];
+            if (!exiledPlayer) return;
+
+            if (!confirm(`🗳️ 點票完畢！最高票數為 [${exiledPlayer.name}] (${maxVotes} 票)。\n確定要強制執行處決並推入下一夜嗎？`)) return;
+
+            // 4. 計算處決後的命運和勝負判定
+            let aliveWolves = 0;
+            let aliveGoodGuys = 0;
+            Object.entries(players).forEach(([pId, pData]) => {
+                if (pId === exiledId) return; // 模擬此人已死
+                if (pData.isDead !== true) {
+                    if (pData.role && pData.role.includes("狼人")) aliveWolves++;
+                    else aliveGoodGuys++;
+                }
+            });
+
+            const dayUpdates = {};
+            dayUpdates[`rooms/${currentRoom}/players/${exiledId}/isDead`] = true;
+            dayUpdates[`rooms/${currentRoom}/votes`] = null; // 清空本輪投票紀錄
+
+            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
+            const newLogKey = push(logsRef).key;
+
+            if (aliveWolves === 0) {
+                dayUpdates[`rooms/${currentRoom}/state`] = "ended";
+                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被處決！所有狼人已死，好人陣營獲勝！🎉` };
+            } else if (aliveWolves >= aliveGoodGuys) {
+                dayUpdates[`rooms/${currentRoom}/state`] = "ended";
+                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被處決！狼人數量已大於或等於好人，狼人陣營獲勝！🐺` };
+            } else {
+                dayUpdates[`rooms/${currentRoom}/state`] = "night"; // 自動進入下一晚
+                dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被放逐，真實身份為：[${exiledPlayer.role}]。天黑請閉眼... 🌙` };
+            }
+
+            await update(ref(db), dayUpdates);
+        });
+
+        // 🌙 冇人出局直接入夜 (跳過放逐)
         nightBtn.addEventListener('click', () => {
             if (!currentRoom) return;
-            set(ref(db, `rooms/${currentRoom}/state`), "night");
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🌙 【天黑請閉眼】黑夜再次降臨，各陣營請秘密行動！` });
+            
+            const skipUpdates = {};
+            skipUpdates[`rooms/${currentRoom}/state`] = "night";
+            skipUpdates[`rooms/${currentRoom}/votes`] = null;
+            
+            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
+            const newLogKey = push(logsRef).key;
+            skipUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🌙 房主宣告本輪無人出局。黑夜再次降臨，請各陣營秘密行動！` };
+            
+            update(ref(db), skipUpdates);
         });
     </script>
 </body>
