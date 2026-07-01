@@ -96,12 +96,10 @@
         let isHost = false; 
         let amIReady = false; 
 
-        // 女巫每局只有一瓶藥水的狀態控制
+        // 狀態控制
         let hasSavePotion = true;
         let hasPoisonPotion = true;
-
-        // 預言家每晚只能驗一次人的狀態控制
-        let hasCheckedTonight = false;
+        let hasCheckedTonight = false; // 預言家每晚一驗
 
         const nameInput = document.getElementById('nameInput');
         const roomInput = document.getElementById('roomInput');
@@ -146,7 +144,8 @@
 
             const newPlayerRef = push(playersRef);
             myPlayerId = newPlayerRef.key; 
-            set(newPlayerRef, { name: username, role: "等待開局...", ready: false });
+            // 加入 isDead 屬性
+            set(newPlayerRef, { name: username, role: "等待開局...", ready: false, isDead: false });
 
             const newLogRef = push(logsRef);
             set(newLogRef, { text: `👤 ${username} 塞咗入房喇。` });
@@ -166,6 +165,9 @@
 
                 const gameState = roomData.state || "waiting";
                 const totalInRoom = roomData.players ? Object.keys(roomData.players).length : 0;
+                
+                // 確定自己生死狀態
+                const amIDead = roomData.players && roomData.players[myPlayerId] ? roomData.players[myPlayerId].isDead : false;
 
                 playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} 人)：`;
 
@@ -200,12 +202,11 @@
                     
                     if (isHost) { dayBtn.style.display = "block"; nightBtn.style.display = "none"; }
 
-                    // 🧙‍♀️ 女巫黑夜專屬顯示
-                    if (myRole && myRole.includes("女巫")) {
+                    // 🧙‍♀️ 女巫黑夜專屬顯示 (自己未死先可以見到)
+                    if (myRole && myRole.includes("女巫") && !amIDead) {
                         witchPanel.style.display = "block";
                         const actions = roomData.night_actions || {};
                         if (actions.wolf_target) {
-                            // 從 ID 查出被刀者名字
                             const victimId = actions.wolf_target;
                             const victimName = roomData.players[victimId] ? roomData.players[victimId].name : "未知玩家";
                             witchHint.innerText = `🚨 收到風！今晚被殺嘅係：[${victimName}]`;
@@ -227,7 +228,7 @@
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
                     
-                    // 重置預言家的技能狀態，準備迎接下一個黑夜
+                    // 重置預言家的技能狀態
                     hasCheckedTonight = false; 
                     
                     if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "block"; }
@@ -254,7 +255,14 @@
                             const li = document.createElement('li');
                             
                             let statusHtml = "";
-                            if (gameState === "waiting") {
+                            const isDead = playerObj.isDead === true;
+                            
+                            if (isDead) {
+                                // 死咗嘅人標記陣亡
+                                statusHtml = `<span class="status-badge" style="background:#555; color:#e50914;">💀 已陣亡</span>`;
+                                li.style.opacity = "0.5"; 
+                                li.style.textDecoration = "line-through";
+                            } else if (gameState === "waiting") {
                                 statusHtml = playerObj.ready ? 
                                     `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : 
                                     `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
@@ -265,8 +273,8 @@
 
                             li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml}</span>`;
 
-                            // 🚨 秘密黑夜技能操作
-                            if (gameState === "night" && id !== myPlayerId) {
+                            // 🚨 秘密黑夜技能操作 (目標未死 + 自己未死先可以行動)
+                            if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
                                 if (myRole && myRole.includes("狼人")) {
                                     const killBtn = document.createElement('button');
                                     killBtn.className = "skill-btn";
@@ -313,7 +321,11 @@
 
                             if (id === myPlayerId && playerObj.role !== "等待開局...") {
                                 identityCard.style.display = "block";
-                                roleText.innerText = myRole;
+                                roleText.innerText = amIDead ? `${myRole} (💀 已陣亡)` : myRole;
+                                if (amIDead) {
+                                    identityCard.style.background = "#333";
+                                    identityCard.style.color = "#888";
+                                }
                             }
                         }
                     });
@@ -378,8 +390,14 @@
 
             playerIds.forEach((id, index) => {
                 const assignedRole = rolesPool[index] || "🧑‍🌾 村民"; 
+                // 開局重置玩家角色同生死狀態
                 set(ref(db, `rooms/${currentRoom}/players/${id}/role`), assignedRole);
+                set(ref(db, `rooms/${currentRoom}/players/${id}/isDead`), false);
             });
+
+            // 開局重置女巫藥水
+            hasSavePotion = true;
+            hasPoisonPotion = true;
 
             set(ref(db, `rooms/${currentRoom}/state`), "night");
             
@@ -406,35 +424,40 @@
             let witchPoisoned = actions.witch_poison || null;
 
             let deadTonight = [];
+            let deadTonightIds = [];
 
             // 1. 計算狼刀與解藥
             if (wolfTarget) {
-                if (witchSaved) {
-                    // 被救活了，相安無事
-                } else {
+                if (!witchSaved) {
                     deadTonight.push(players[wolfTarget] ? players[wolfTarget].name : "未知玩家");
+                    deadTonightIds.push(wolfTarget);
                 }
             }
 
             // 2. 計算毒藥
             if (witchPoisoned) {
                 deadTonight.push(players[witchPoisoned] ? players[witchPoisoned].name : "未知玩家");
+                deadTonightIds.push(witchPoisoned);
             }
 
             // 3. 切換至白天狀態
             set(ref(db, `rooms/${currentRoom}/state`), "day");
 
-            // 4. 公布死亡名單
+            // 4. [新增機制] 喺 Database 賜死佢哋
+            deadTonightIds.forEach(deadId => {
+                set(ref(db, `rooms/${currentRoom}/players/${deadId}/isDead`), true);
+            });
+
+            // 5. 公布死亡名單
             push(logsRef).set({ text: `☀️ 【天亮了】房主叫醒了所有人。` });
             if (deadTonight.length === 0) {
                 push(logsRef).set({ text: `🕊️ 尋晚係平安夜！冇人死到，大吉大利！` });
             } else {
-                // 去重顯示
                 let uniqueDead = [...new Set(deadTonight)];
                 push(logsRef).set({ text: `💀 尋晚死咗嘅人有：[ ${uniqueDead.join(', ')} ]。全場同哀！` });
             }
 
-            // 5. 🧠 清空這一晚的秘密行動數據，準備迎接下一晚
+            // 6. 🧠 清空這一晚的秘密行動數據
             remove(ref(db, `rooms/${currentRoom}/night_actions`));
         });
 
