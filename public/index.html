@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 - Phase 2 派牌版</title>
+    <title>廣東話狼人殺 - Phase 2 隱藏身份版</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -62,7 +62,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        let myPlayerId = null; // 記錄自己在 Firebase 的專屬 ID
+        let myPlayerId = null; 
         let currentRoom = null;
 
         const nameInput = document.getElementById('nameInput');
@@ -87,34 +87,38 @@
             const playersRef = ref(db, `rooms/${currentRoom}/players`);
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
 
-            // 1. 把自己塞入名單，並抓取隨機生成的 Key 
             const newPlayerRef = push(playersRef);
-            myPlayerId = newPlayerRef.key; // 認住自己個 Key
+            myPlayerId = newPlayerRef.key; 
             set(newPlayerRef, { name: username, role: "等待開局..." });
 
-            // 2. 寫入 Log
             const newLogRef = push(logsRef);
             set(newLogRef, { text: `👤 ${username} 塞咗入房喇。` });
 
             joinBtn.disabled = true;
             joinBtn.innerText = "成功入房";
-            startBtn.style.display = "block"; // 顯示開局掣
+            startBtn.style.display = "block"; 
 
-            // 3. 核心監聽：房內所有人即時更新
             onValue(roomRef, (snapshot) => {
                 const roomData = snapshot.val();
                 if (!roomData) return;
 
-                // 更新人名名單
+                // 更新人名名單（保密狀態）
                 playerList.innerHTML = '';
                 if (roomData.players) {
                     Object.entries(roomData.players).forEach(([id, playerObj]) => {
                         if (playerObj && playerObj.name) {
                             const li = document.createElement('li');
-                            li.innerText = `👤 ${playerObj.name} [${playerObj.role}]`;
+                            
+                            // 💡 核心改動：如果未開局，顯示等待；已開局，一律顯示 [? 隱藏]，不泄露身份！
+                            let displayRole = "⏳ 等待開局...";
+                            if (playerObj.role !== "等待開局...") {
+                                displayRole = "🔒 身份已隱藏";
+                            }
+
+                            li.innerText = `👤 ${playerObj.name} [${displayRole}]`;
                             playerList.appendChild(li);
 
-                            // 如果後端已經分派左身份，而呢個 ID 咁啱係我，就彈出身份卡！
+                            // 💡 只有當名單入面嘅 ID 係「自己」部機，先至偷偷喺上面抽張黃卡出嚟！
                             if (id === myPlayerId && playerObj.role !== "等待開局...") {
                                 identityCard.style.display = "block";
                                 roleText.innerText = playerObj.role;
@@ -139,11 +143,9 @@
             });
         });
 
-        // 🔥 撳「開局掣」派牌邏輯！
         startBtn.addEventListener('click', async () => {
             if (!currentRoom) return;
 
-            // 先去資料庫捉晒現時房內有邊幾個玩家
             const playersRef = ref(db, `rooms/${currentRoom}/players`);
             const snapshot = await get(playersRef);
             const playersData = snapshot.val();
@@ -153,34 +155,28 @@
             const playerIds = Object.keys(playersData);
             const totalPlayers = playerIds.length;
 
-            // 廣東話狼人殺簡易派牌池（根據人數隨機分派）
-            // 規則範例：如果得 2-3 人，1隻狼，其餘村民/預言家
             let rolesPool = [];
             if (totalPlayers <= 2) {
                 rolesPool = ["🐺 狼人", "👁️ 預言家"];
             } else if (totalPlayers === 3) {
                 rolesPool = ["🐺 狼人", "👁️ 預言家", "🧑‍🌾 村民"];
             } else {
-                // 4人或以上
                 rolesPool = ["🐺 狼人", "👁️ 預言家", "🧑‍🌾 村民", "🧑‍🌾 村民", "🛡️ 女巫", "🐺 狼人"];
             }
 
-            // 漁夫洗牌法 (Fisher-Yates Shuffle) 隨機打亂牌池
             for (let i = rolesPool.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [rolesPool[i], rolesPool[j]] = [rolesPool[j], rolesPool[i]];
             }
 
-            // 逐個玩家更新身份入 Firebase 雲端
             playerIds.forEach((id, index) => {
-                const assignedRole = rolesPool[index] || "🧑‍🌾 村民"; // 萬一爆人數就做村民
+                const assignedRole = rolesPool[index] || "🧑‍🌾 村民"; 
                 set(ref(db, `rooms/${currentRoom}/players/${id}/role`), assignedRole);
             });
 
-            // 發一條開局 Log 宣戰
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
             const newLogRef = push(logsRef);
-            set(newLogRef, { text: `🎬 【遊戲開始】天黑請閉眼，身份牌已發出！` });
+            set(newLogRef, { text: `🎬 【遊戲開始】天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
         });
     </script>
 </body>
