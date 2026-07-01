@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.11</title>
+    <title>廣東話狼人殺 v1.7.12</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.11</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.12</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -332,24 +332,25 @@
 
                                 li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
 
-                                // NIGHT ACTIONS: Removed id !== myPlayerId so Wolves can self-target
                                 if (gameState === "night" && !isDead && !amIDead) {
                                     
                                     // 🐺 WOLF: Can target ANYONE, including themselves (自刀)
                                     if (myRole && myRole.includes("狼人")) {
                                         const hasLocked = nightWolfLocks[myPlayerId] === true;
+                                        const allLocked = (totalLocksCount === aliveWolvesCount && aliveWolvesCount > 0);
 
                                         const killBtn = document.createElement('button');
                                         killBtn.className = "skill-btn";
-                                        killBtn.style.background = hasLocked ? "#555555" : "#b30000";
+                                        killBtn.style.background = allLocked ? "#555555" : "#b30000";
                                         killBtn.innerText = id === myPlayerId ? "🔪 刀自己 (自刀)" : "🔪 點選目標";
                                         
-                                        if (hasLocked) {
+                                        if (allLocked) {
                                             killBtn.style.cursor = "not-allowed";
-                                            killBtn.onclick = () => alert("🔒 你已經確認鎖定，冇得反悔啦！");
+                                            killBtn.onclick = () => alert("🔒 狼人已經全體確認鎖定，冇得反悔啦！");
                                         } else {
                                             killBtn.onclick = () => {
                                                 set(ref(db, `rooms/${currentRoom}/night_wolf_votes/${myPlayerId}`), id);
+                                                // Cancel lock if changing target
                                                 set(ref(db, `rooms/${currentRoom}/night_wolf_locks/${myPlayerId}`), null);
                                             };
                                         }
@@ -359,11 +360,19 @@
                                         if (wVoters.length === aliveWolvesCount && aliveWolvesCount > 0) {
                                             const lockBtn = document.createElement('button');
                                             lockBtn.className = "skill-btn";
-                                            lockBtn.style.background = hasLocked ? "#28a745" : "#ffaa00";
-                                            lockBtn.style.color = hasLocked ? "#fff" : "#000";
-                                            lockBtn.innerText = hasLocked ? "✅ 已鎖定目標" : "🔒 雙方同意，確認鎖定！";
+                                            lockBtn.style.background = allLocked ? "#28a745" : (hasLocked ? "#17a2b8" : "#ffaa00");
+                                            lockBtn.style.color = (allLocked || hasLocked) ? "#fff" : "#000";
+                                            
+                                            if (allLocked) {
+                                                lockBtn.innerText = "✅ 已達成共識 (全體鎖定)";
+                                            } else if (hasLocked) {
+                                                lockBtn.innerText = "⏳ 等緊隊友確認...";
+                                            } else {
+                                                lockBtn.innerText = "🔒 雙方同意，確認鎖定！";
+                                            }
+
                                             lockBtn.onclick = () => {
-                                                if (!hasLocked) {
+                                                if (!hasLocked && !allLocked) {
                                                     set(ref(db, `rooms/${currentRoom}/night_wolf_locks/${myPlayerId}`), true);
                                                 }
                                             };
