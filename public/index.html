@@ -3,34 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 - Firebase版</title>
+    <title>廣東話狼人殺 - Firebase同步版</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 30px; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         input { width: 80%; padding: 10px; margin: 10px 0; border-radius: 4px; border: 1px solid #333; background: #2c2c2c; color: #fff; font-size: 16px; }
         button { width: 85%; padding: 12px; background: #e50914; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px; }
-        #log-box { width: 85%; height: 200px; background: #000; margin: 20px auto; padding: 10px; border-radius: 4px; text-align: left; overflow-y: auto; font-family: monospace; color: #00ff00; }
+        #player-box { width: 85%; background: #2a2a2a; margin: 15px auto; padding: 10px; border-radius: 4px; text-align: left; border-left: 5px solid #e50914; }
+        #log-box { width: 85%; height: 150px; background: #000; margin: 15px auto; padding: 10px; border-radius: 4px; text-align: left; overflow-y: auto; font-family: monospace; color: #00ff00; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { padding: 5px 0; font-size: 16px; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h2>🐺 廣東話狼人殺 Phase 1</h2>
-        <p>測試 Firebase 即時連線</p>
+        <p>測試 Firebase 完美同步房</p>
         
         <input type="text" id="nameInput" placeholder="打你嘅大名 (e.g. 鴨寮街預言家)">
         <input type="text" id="roomInput" placeholder="入房號碼 (e.g. RM999)">
         <button id="joinBtn">進攻間房</button>
 
-        <h3>房內即時動態：</h3>
+        <h3>👥 間房有邊個 (即時同步)：</h3>
+        <div id="player-box">
+            <ul id="playerList"></ul>
+        </div>
+
+        <h3>📜 房內即時動態：</h3>
         <div id="log-box"></div>
     </div>
 
+    <!-- 載入官方 Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // 經已自動幫你注入你嘅專屬 Config 🔑
         const firebaseConfig = {
             apiKey: "AIzaSyD5Aoi4sTvkfSr7B5mkpovRgs3hK3EXO44",
             authDomain: "canto-wolf-db.firebaseapp.com",
@@ -42,13 +50,13 @@
             measurementId: "G-VRSPGVTZFC"
         };
 
-        // 初始化 Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
         const nameInput = document.getElementById('nameInput');
         const roomInput = document.getElementById('roomInput');
         const joinBtn = document.getElementById('joinBtn');
+        const playerList = document.getElementById('playerList');
         const logBox = document.getElementById('log-box');
 
         joinBtn.addEventListener('click', () => {
@@ -60,22 +68,44 @@
                 return;
             }
 
-            // 1. 指定資料庫路徑：/rooms/房號/logs
-            const roomLogRef = ref(db, `rooms/${roomCode}/logs`);
-            
-            // 2. 推送新數據入資料庫 (向房內廣播)
-            const newLogRef = push(roomLogRef);
-            set(newLogRef, {
-                text: `👤 ${username} 成功塞咗入嚟房間 [${roomCode}] 喇！`
-            });
+            // 1. 定位去呢間房嘅總路徑
+            const roomRef = ref(db, `rooms/${roomCode}`);
+            const playersRef = ref(db, `rooms/${roomCode}/players`);
+            const logsRef = ref(db, `rooms/${roomCode}/logs`);
 
-            // 3. 監聽呢間房：只要雲端有一丁點風吹草動，即時彈出畫面
-            onChildAdded(roomLogRef, (snapshot) => {
-                const logData = snapshot.val();
-                const p = document.createElement('p');
-                p.innerText = logData.text;
-                p.style.margin = "4px 0";
-                logBox.appendChild(p);
+            // 2. 把自己寫入「玩家名單群組」
+            const newPlayerRef = push(playersRef);
+            set(newPlayerRef, username);
+
+            // 3. 同時寫入一條歷史 Log
+            const newLogRef = push(logsRef);
+            set(newLogRef, `👤 ${username} 成功塞咗入嚟房間 [${roomCode}] 喇！`);
+
+            // 4. 【核心關鍵】使用 onValue 監聽整間房嘅變動，不論新舊玩家，只要有人入，全部人一齊觸發更新
+            onValue(roomRef, (snapshot) => {
+                const roomData = snapshot.val();
+                if (!roomData) return;
+
+                // 更新玩家名單
+                playerList.innerHTML = '';
+                if (roomData.players) {
+                    Object.values(roomData.players).forEach(name => {
+                        const li = document.createElement('li');
+                        li.innerText = `👤 ${name}`;
+                        playerList.appendChild(li);
+                    });
+                }
+
+                // 更新動態紀錄 Log
+                logBox.innerHTML = '';
+                if (roomData.logs) {
+                    Object.values(roomData.logs).forEach(logText => {
+                        const p = document.createElement('p');
+                        p.innerText = logText;
+                        p.style.margin = "4px 0";
+                        logBox.appendChild(p);
+                    });
+                }
                 logBox.scrollTop = logBox.scrollHeight;
             });
 
