@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.2</title>
+    <title>廣東話狼人殺 v1.7.3</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -25,12 +25,16 @@
         .status-badge { font-size: 12px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         
         #witch-panel { width: 85%; background: #4b0082; margin: 10px auto; padding: 10px; border-radius: 4px; border: 2px solid #da70d6; text-align: left; display: none; }
+        
+        /* 自訂人數面板樣式 */
+        .config-row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; font-size: 14px; color: #fff; }
+        .config-row input { width: 60px; padding: 5px; margin: 0; text-align: center; background: #333; border: 1px solid #555; border-radius: 4px; color: #fff; }
     </style>
 </head>
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.2</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.3</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -57,6 +61,15 @@
 
         <div id="host-panel" style="display: none; border: 2px dashed #28a745; padding: 10px; margin: 10px 0; border-radius: 6px;">
             <p style="margin: 0 0 5px 0; font-size: 14px; color: #28a745; font-weight: bold;">👑 房主控制面板</p>
+            
+            <div id="role-config-area" style="background: #252525; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #3c3c3c;">
+                <p style="margin: 0 0 8px 0; font-size: 13px; color: #ffaa00; font-weight: bold; text-align: left;">🛠️ 自訂身份配置 (分配總和需等同入房人數)：</p>
+                <div class="config-row"><span>🐺 狼人 人數:</span><input type="number" id="cfg-wolf" value="1" min="0"></div>
+                <div class="config-row"><span>👁️ 預言家 人數:</span><input type="number" id="cfg-seer" value="1" min="0"></div>
+                <div class="config-row"><span>🧙‍♀️ 女巫 人數:</span><input type="number" id="cfg-witch" value="1" min="0"></div>
+                <div class="config-row"><span>🧑‍🌾 村民 人數:</span><input type="number" id="cfg-villager" value="0" min="0"></div>
+            </div>
+
             <button id="startGameBtn" style="background: #28a745; display: none;">🎬 全員準備就緒！點擊確認開局</button>
             <button id="dayBtn" style="background: #28a745; display: none;">☀️ 叫醒所有人（天光結算）</button>
             <button id="tallyVotesBtn" style="background: #ffaa00; color: #000; display: none;">🗳️ 點票並公投處決最高票者</button>
@@ -107,6 +120,7 @@
         const tallyVotesBtn = document.getElementById('tallyVotesBtn');
         const nightBtn = document.getElementById('nightBtn');
         const hostPanel = document.getElementById('host-panel');
+        const roleConfigArea = document.getElementById('role-config-area');
         const playerList = document.getElementById('playerList');
         const logBox = document.getElementById('log-box');
         const identityCard = document.getElementById('identity-card');
@@ -175,14 +189,17 @@
                     phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom} 已準備)`;
                     readyArea.style.display = "block"; 
                     witchPanel.style.display = "none";
-                    if (isHost && totalInRoom >= 2 && readyCount === totalInRoom) {
-                        startGameBtn.style.display = "block";
-                        readySummaryText.innerText = "✅ 全員已準備好！請房主確認開局！";
-                    } else {
-                        startGameBtn.style.display = "none";
-                        readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
+                    if (isHost) {
+                        roleConfigArea.style.display = "block"; // 只有等待組隊時開放自訂人數
+                        if (totalInRoom >= 2 && readyCount === totalInRoom) {
+                            startGameBtn.style.display = "block";
+                            readySummaryText.innerText = "✅ 全員已準備好！請房主確認身份配置並開局！";
+                        } else {
+                            startGameBtn.style.display = "none";
+                            readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
+                        }
+                        dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none";
                     }
-                    if (isHost) { dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
 
                 } else if (gameState === "night") {
                     document.body.classList.add('night-mode');
@@ -190,7 +207,7 @@
                     phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中...";
                     readyArea.style.display = "none"; 
                     startGameBtn.style.display = "none";
-                    if (isHost) { dayBtn.style.display = "block"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
+                    if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "block"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
 
                     if (myRole && myRole.includes("女巫") && !amIDead) {
                         witchPanel.style.display = "block";
@@ -220,7 +237,7 @@
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
                     hasCheckedTonight = false; 
-                    if (isHost) { dayBtn.style.display = "none"; tallyVotesBtn.style.display = "block"; nightBtn.style.display = "block"; }
+                    if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "none"; tallyVotesBtn.style.display = "block"; nightBtn.style.display = "block"; }
                 
                 } else if (gameState === "ended") {
                     document.body.classList.remove('night-mode');
@@ -229,12 +246,12 @@
                     readyArea.style.display = "none";
                     startGameBtn.style.display = "none";
                     witchPanel.style.display = "none";
-                    if (isHost) { dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
+                    if (isHost) { roleConfigArea.style.display = "none"; dayBtn.style.display = "none"; tallyVotesBtn.style.display = "none"; nightBtn.style.display = "none"; }
                 }
 
                 // 2. 預先處理白天公投數據
                 const votesData = roomData.votes || {};
-                const voteCounts = {}; // targetPlayerId -> Array of voter names
+                const voteCounts = {}; 
                 Object.entries(votesData).forEach(([voterId, targetId]) => {
                     if (roomData.players && roomData.players[voterId]) {
                         if (!voteCounts[targetId]) voteCounts[targetId] = [];
@@ -270,7 +287,6 @@
                                 statusHtml = `<span style="color:#aaa;">[${displayRole}]</span>`;
                             }
 
-                            // 如果是白天，實時把得票及投票者清單塞進標籤
                             if (gameState === "day" && !isDead) {
                                 const voters = voteCounts[id] || [];
                                 if (voters.length > 0) {
@@ -320,7 +336,7 @@
                                 }
                             }
 
-                            // ☀️ 【全新功能】白天玩家公投按鈕 (活人能投給除了自己以外的活人)
+                            // ☀️ 白天玩家公投按鈕
                             if (gameState === "day" && id !== myPlayerId && !isDead && !amIDead) {
                                 const voteBtn = document.createElement('button');
                                 voteBtn.className = "skill-btn";
@@ -378,7 +394,7 @@
             push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: nextReadyState ? `👍 ${username} 準備好喇！` : `✋ ${username} 取消咗準備。` });
         });
 
-        // 🎬 房主開局
+        // 🎬 房主開局 (帶有自訂配置人數驗證)
         startGameBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
             const snap = await get(ref(db, `rooms/${currentRoom}/players`));
@@ -388,29 +404,47 @@
             const playerIds = Object.keys(playersData);
             const totalPlayers = playerIds.length;
 
-            let rolesPool = [];
-            if (totalPlayers <= 2) rolesPool = ["🐺 狼人", "👁️ 預言家"];
-            else if (totalPlayers === 3) rolesPool = ["🐺 狼人", "👁️ 預言家", "🧙‍♀️ 女巫"];
-            else rolesPool = ["🐺 狼人", "👁️ 預言家", "🧙‍♀️ 女巫", "🧑‍🌾 村民"];
+            // 1. 讀取房主自訂的人數
+            const numWolf = parseInt(document.getElementById('cfg-wolf').value) || 0;
+            const numSeer = parseInt(document.getElementById('cfg-seer').value) || 0;
+            const numWitch = parseInt(document.getElementById('cfg-witch').value) || 0;
+            const numVillager = parseInt(document.getElementById('cfg-villager').value) || 0;
 
+            // 2. 安全驗證：總數必須跟目前房間人數一致
+            const totalConfigured = numWolf + numSeer + numWitch + numVillager;
+            if (totalConfigured !== totalPlayers) {
+                alert(`❌ 人數不符！你配置嘅身份總數係 ${totalConfigured} 人，但依家間房有 ${totalPlayers} 人。\n請調整到一模一樣先開到局！`);
+                return;
+            }
+
+            // 3. 根據自訂數據動態建立身份池
+            let rolesPool = [];
+            for (let i = 0; i < numWolf; i++) rolesPool.push("🐺 狼人");
+            for (let i = 0; i < numSeer; i++) rolesPool.push("👁️ 預言家");
+            for (let i = 0; i < numWitch; i++) rolesPool.push("🧙‍♀️ 女巫");
+            for (let i = 0; i < numVillager; i++) rolesPool.push("🧑‍🌾 村民");
+
+            // 4. 洗牌洗亂
             for (let i = rolesPool.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [rolesPool[i], rolesPool[j]] = [rolesPool[j], rolesPool[i]];
             }
 
+            // 5. 分發身份給玩家
             playerIds.forEach((id, index) => {
-                const assignedRole = rolesPool[index] || "🧑‍🌾 村民"; 
+                const assignedRole = rolesPool[index]; 
                 const playerInitData = { name: playersData[id].name, role: assignedRole, ready: false, isDead: false };
                 if (assignedRole.includes("女巫")) { playerInitData.hasSavePotion = true; playerInitData.hasPoisonPotion = true; }
                 set(ref(db, `rooms/${currentRoom}/players/${id}`), playerInitData);
             });
 
+            // 6. 推進至黑夜狀態
             set(ref(db, `rooms/${currentRoom}/state`), "night");
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-            push(logsRef).set({ text: `🎬 房主已確認！遊戲開始！天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
+            push(logsRef).set({ text: `🎬 房主已自訂配置並確認！遊戲開始！天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
         });
 
-        // ☀️ 天光結算中心 (從黑夜進入白天)
+        // ☀️ 天光結算中心
         dayBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
@@ -455,7 +489,7 @@
             });
 
             nightUpdates[`rooms/${currentRoom}/night_actions`] = null;
-            nightUpdates[`rooms/${currentRoom}/votes`] = null; // 進入白天前必先清空上一輪投票資料
+            nightUpdates[`rooms/${currentRoom}/votes`] = null; 
 
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
             const logKey1 = push(logsRef).key;
@@ -484,7 +518,7 @@
             await update(ref(db), nightUpdates);
         });
 
-        // 🗳️ 【全新功能】智能公投點票算法中心
+        // 🗳️ 智能公投點票算法中心
         tallyVotesBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
@@ -501,13 +535,11 @@
                 return;
             }
 
-            // 1. 計算每位玩家所得票數
             const scoreSheet = {};
             Object.values(votes).forEach(targetId => {
                 scoreSheet[targetId] = (scoreSheet[targetId] || 0) + 1;
             });
 
-            // 2. 尋找最高票數的玩家
             let maxVotes = 0;
             let highestVotedIds = [];
             Object.entries(scoreSheet).forEach(([targetId, count]) => {
@@ -519,7 +551,6 @@
                 }
             });
 
-            // 3. 安全防禦：處理同票打和局狀況
             if (highestVotedIds.length > 1) {
                 const tiedNames = highestVotedIds.map(id => players[id] ? players[id].name : "未知").join(', ');
                 alert(`⚠️ 【同票警告】出現平票！最高得票者有 [ ${tiedNames} ] 各得 ${maxVotes} 票。\n請全場重開討論，進行PK發言並重新投票！`);
@@ -532,11 +563,10 @@
 
             if (!confirm(`🗳️ 點票完畢！最高票數為 [${exiledPlayer.name}] (${maxVotes} 票)。\n確定要強制執行處決並推入下一夜嗎？`)) return;
 
-            // 4. 計算處決後的命運和勝負判定
             let aliveWolves = 0;
             let aliveGoodGuys = 0;
             Object.entries(players).forEach(([pId, pData]) => {
-                if (pId === exiledId) return; // 模擬此人已死
+                if (pId === exiledId) return; 
                 if (pData.isDead !== true) {
                     if (pData.role && pData.role.includes("狼人")) aliveWolves++;
                     else aliveGoodGuys++;
@@ -545,7 +575,7 @@
 
             const dayUpdates = {};
             dayUpdates[`rooms/${currentRoom}/players/${exiledId}/isDead`] = true;
-            dayUpdates[`rooms/${currentRoom}/votes`] = null; // 清空本輪投票紀錄
+            dayUpdates[`rooms/${currentRoom}/votes`] = null; 
 
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
             const newLogKey = push(logsRef).key;
@@ -557,14 +587,14 @@
                 dayUpdates[`rooms/${currentRoom}/state`] = "ended";
                 dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被處決！狼人數量已大於或等於好人，狼人陣營獲勝！🐺` };
             } else {
-                dayUpdates[`rooms/${currentRoom}/state`] = "night"; // 自動進入下一晚
+                dayUpdates[`rooms/${currentRoom}/state`] = "night"; 
                 dayUpdates[`rooms/${currentRoom}/logs/${newLogKey}`] = { text: `🗳️ 【公投結算】[${exiledPlayer.name}] 獲得全場最高 ${maxVotes} 票被放逐，真實身份為：[${exiledPlayer.role}]。天黑請閉眼... 🌙` };
             }
 
             await update(ref(db), dayUpdates);
         });
 
-        // 🌙 冇人出局直接入夜 (跳過放逐)
+        // 🌙 冇人出局直接入夜
         nightBtn.addEventListener('click', () => {
             if (!currentRoom) return;
             
