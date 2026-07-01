@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.13</title>
+    <title>廣東話狼人殺 v1.7.14</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.13</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.14</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -66,6 +66,7 @@
                 <div class="config-row"><span>🐺 狼人 人數:</span><input type="number" id="cfg-wolf" value="2" min="0"></div>
                 <div class="config-row"><span>👁️ 預言家 人數:</span><input type="number" id="cfg-seer" value="1" min="0"></div>
                 <div class="config-row"><span>🧙‍♀️ 女巫 人數:</span><input type="number" id="cfg-witch" value="1" min="0"></div>
+                <div class="config-row"><span>🛡️ 守衛 人數:</span><input type="number" id="cfg-guard" value="1" min="0"></div>
                 <div class="config-row"><span>🧑‍🌾 村民 人數:</span><input type="number" id="cfg-villager" value="0" min="0"></div>
             </div>
 
@@ -356,7 +357,6 @@
                                         } else {
                                             killBtn.onclick = () => {
                                                 set(ref(db, `rooms/${currentRoom}/night_wolf_votes/${myPlayerId}`), id);
-                                                // Cancel lock if changing target
                                                 set(ref(db, `rooms/${currentRoom}/night_wolf_locks/${myPlayerId}`), null);
                                             };
                                         }
@@ -409,6 +409,29 @@
                                             set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/hasPoisonPotion`), false);
                                         };
                                         li.appendChild(poisonTargetBtn);
+                                    }
+                                    // 🛡️ GUARD: Can protect anyone including self, but not consecutive nights
+                                    else if (myRole && myRole.includes("守衛")) {
+                                        const lastProtected = roomData.guard_last_protected || null;
+                                        const currentProtected = roomData.night_actions?.guard_protect || null;
+                                        
+                                        if (id === lastProtected) {
+                                            const disableBtn = document.createElement('button');
+                                            disableBtn.className = "skill-btn";
+                                            disableBtn.style.background = "#555";
+                                            disableBtn.style.cursor = "not-allowed";
+                                            disableBtn.innerText = "🚫 不能連續守護";
+                                            li.appendChild(disableBtn);
+                                        } else {
+                                            const guardBtn = document.createElement('button');
+                                            guardBtn.className = "skill-btn";
+                                            guardBtn.style.background = (currentProtected === id) ? "#28a745" : "#708090";
+                                            guardBtn.innerText = (currentProtected === id) ? "🛡️ 正在守護" : "🛡️ 守護此玩家";
+                                            guardBtn.onclick = () => {
+                                                set(ref(db, `rooms/${currentRoom}/night_actions/guard_protect`), id);
+                                            };
+                                            li.appendChild(guardBtn);
+                                        }
                                     }
                                 }
 
@@ -476,9 +499,10 @@
             const numWolf = parseInt(document.getElementById('cfg-wolf').value) || 0;
             const numSeer = parseInt(document.getElementById('cfg-seer').value) || 0;
             const numWitch = parseInt(document.getElementById('cfg-witch').value) || 0;
+            const numGuard = parseInt(document.getElementById('cfg-guard').value) || 0;
             const numVillager = parseInt(document.getElementById('cfg-villager').value) || 0;
 
-            if ((numWolf + numSeer + numWitch + numVillager) !== totalPlayers) {
+            if ((numWolf + numSeer + numWitch + numGuard + numVillager) !== totalPlayers) {
                 alert(`❌ 人數不符！`); return;
             }
 
@@ -486,6 +510,7 @@
             for (let i = 0; i < numWolf; i++) rolesPool.push("🐺 狼人");
             for (let i = 0; i < numSeer; i++) rolesPool.push("👁️ 預言家");
             for (let i = 0; i < numWitch; i++) rolesPool.push("🧙‍♀️ 女巫");
+            for (let i = 0; i < numGuard; i++) rolesPool.push("🛡️ 守衛");
             for (let i = 0; i < numVillager; i++) rolesPool.push("🧑‍🌾 村民");
 
             for (let i = rolesPool.length - 1; i > 0; i--) {
@@ -501,6 +526,7 @@
             });
 
             set(ref(db, `rooms/${currentRoom}/state`), "night");
+            set(ref(db, `rooms/${currentRoom}/guard_last_protected`), null); 
             set(push(ref(db, `rooms/${currentRoom}/logs`)), { text: `🎬 遊戲開始！天黑請閉眼。` });
         });
 
@@ -537,14 +563,30 @@
 
             let witchSaved = actions.witch_save || false;
             let witchPoisoned = actions.witch_poison || null;
+            let guardTarget = actions.guard_protect || null;
 
             let deadTonight = [];
             let deadTonightIds = [];
 
-            if (wolfTarget && !witchSaved) {
-                deadTonight.push(players[wolfTarget]?.name || "未知");
-                deadTonightIds.push(wolfTarget);
+            // 🛡️ Resolve Guard and Witch Save Logic
+            if (wolfTarget) {
+                const isGuarded = (wolfTarget === guardTarget);
+                if (isGuarded && witchSaved) {
+                    // 同守同救 -> 死亡
+                    deadTonight.push(players[wolfTarget]?.name || "未知");
+                    deadTonightIds.push(wolfTarget);
+                } else if (isGuarded && !witchSaved) {
+                    // 守衛成功 -> 活 (安全)
+                } else if (!isGuarded && witchSaved) {
+                    // 女巫解藥成功 -> 活 (安全)
+                } else {
+                    // 無守無救 -> 死亡
+                    deadTonight.push(players[wolfTarget]?.name || "未知");
+                    deadTonightIds.push(wolfTarget);
+                }
             }
+
+            // 🧪 Witch Poison always bypasses guard protection
             if (witchPoisoned) {
                 deadTonight.push(players[witchPoisoned]?.name || "未知");
                 deadTonightIds.push(witchPoisoned);
@@ -567,6 +609,9 @@
             nightUpdates[`rooms/${currentRoom}/night_wolf_votes`] = null; 
             nightUpdates[`rooms/${currentRoom}/night_wolf_locks`] = null; 
             nightUpdates[`rooms/${currentRoom}/votes`] = null; 
+            
+            // Record this night's shield target for consecutive shield restrictions
+            nightUpdates[`rooms/${currentRoom}/guard_last_protected`] = guardTarget;
 
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
             const logKey1 = push(logsRef).key;
@@ -574,7 +619,7 @@
 
             const logKey2 = push(logsRef).key;
             if (deadTonight.length === 0) {
-                nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `🕊️ 昨晚是平安夜！無人身亡！（狼人未確認/鎖定失敗/空刀或被救）` };
+                nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `🕊️ 昨晚是平安夜！無人身亡！（狼人未確認/空刀/被守護或被救）` };
             } else {
                 nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `💀 昨晚陣亡的人有：[ ${[...new Set(deadTonight)].join(', ')} ]。` };
             }
