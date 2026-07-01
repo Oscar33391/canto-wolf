@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.7</title>
+    <title>廣東話狼人殺 v1.7.8</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.7</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.8</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -169,7 +169,8 @@
                 myPlayerId = newPlayerRef.key; 
                 await set(newPlayerRef, { name: username, role: "等待開局...", ready: false, isDead: false });
 
-                await push(logsRef).set({ text: `👤 ${username} 塞咗入房喇。` });
+                // FIX 1
+                await set(push(logsRef), { text: `👤 ${username} 塞咗入房喇。` });
 
                 joinBtn.innerText = "成功入房";
                 document.getElementById('setup-area').style.display = "none";
@@ -205,7 +206,6 @@
                         amIReady = roomData.players[myPlayerId].ready || false;
                     }
 
-                    // 1. 處理數據
                     const votesData = roomData.votes || {};
                     const voteCounts = {}; 
                     Object.entries(votesData).forEach(([voterId, targetId]) => {
@@ -234,7 +234,6 @@
                         }
                     });
 
-                    // 2. 狀態切換與介面控制
                     if (gameState === "waiting") {
                         phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom})`;
                         readyArea.style.display = "block"; 
@@ -295,7 +294,6 @@
                         witchPanel.style.display = "none";
                     }
 
-                    // 3. 渲染玩家列表
                     playerList.innerHTML = '';
                     if (roomData.players) {
                         if (roomData.players[myPlayerId]) {
@@ -473,10 +471,10 @@
             });
 
             set(ref(db, `rooms/${currentRoom}/state`), "night");
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🎬 遊戲開始！天黑請閉眼。` });
+            // FIX 2
+            set(push(ref(db, `rooms/${currentRoom}/logs`)), { text: `🎬 遊戲開始！天黑請閉眼。` });
         });
 
-        // 天光結算
         dayBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
@@ -563,7 +561,6 @@
             await update(ref(db), nightUpdates);
         });
 
-        // 公投點票結算
         tallyVotesBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
             const snap = await get(ref(db, `rooms/${currentRoom}`));
@@ -618,7 +615,8 @@
             const skipUpdates = {};
             skipUpdates[`rooms/${currentRoom}/state`] = "night";
             skipUpdates[`rooms/${currentRoom}/votes`] = null;
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🌙 房主宣告本輪無人出局。黑夜再次降臨！` });
+            // FIX 3
+            set(push(ref(db, `rooms/${currentRoom}/logs`)), { text: `🌙 房主宣告本輪無人出局。黑夜再次降臨！` });
             update(ref(db), skipUpdates);
         });
     </script>
