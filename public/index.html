@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v2.1.0</title>
+    <title>廣東話狼人殺 v2.1.1</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -25,7 +25,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 <span class="version-badge">v2.1.0</span></h2>
+        <h2>🐺 廣東話狼人殺 <span class="version-badge">v2.1.1</span></h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -75,7 +75,7 @@
         let myRole = "等待開局...";
         let isHost = false; 
 
-        // 💡 測試人數設定 (要 2 人開就改 2)
+        // 💡 測試人數設定 (如果想 2 個人玩就記得改做 2 呀！)
         const TARGET_PLAYERS = 3; 
 
         const nameInput = document.getElementById('nameInput');
@@ -134,13 +134,11 @@
 
                 playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} / ${TARGET_PLAYERS} 人)：`;
 
-                // 自動開局：人數齊 ＋ 狀態係 waiting ➔ 自動洗牌分發身份，狀態定為天亮 "day"
                 if (totalInRoom >= TARGET_PLAYERS && gameState === "waiting" && isHost) {
                     autoStartGameInDay(roomData.players);
                     return; 
                 }
 
-                // 狀態管理
                 if (gameState === "night") {
                     document.body.classList.add('night-mode');
                     mainContainer.classList.add('night-card');
@@ -163,7 +161,6 @@
                     phaseStatus.innerText = `⏳ 狀態：等緊齊人 (${totalInRoom}/${TARGET_PLAYERS}) 自動開局...`;
                 }
 
-                // 更新玩家名單
                 playerList.innerHTML = '';
                 if (roomData.players) {
                     if (roomData.players[myPlayerId]) {
@@ -208,7 +205,6 @@
                     });
                 }
 
-                // 更新日誌
                 logBox.innerHTML = '';
                 if (roomData.logs) {
                     Object.values(roomData.logs).forEach(logObj => {
