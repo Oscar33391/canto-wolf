@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.0</title>
+    <title>廣東話狼人殺 v1.7.1</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -30,7 +30,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.0</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.1</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -259,7 +259,7 @@
 
                             li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml}</span>`;
 
-                            // 🚨 黑夜行動按鈕 (只有活人能對活人執行)
+                            // 黑夜行動按鈕
                             if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
                                 if (myRole && myRole.includes("狼人")) {
                                     const killBtn = document.createElement('button');
@@ -299,7 +299,7 @@
                                 }
                             }
 
-                            // 🗳️ 【核心修復】白天公投處決按鈕 (只顯示畀「房主」用作結算全場投票)
+                            // 白天公投處決按鈕
                             if (gameState === "day" && isHost && !isDead) {
                                 const exileBtn = document.createElement('button');
                                 exileBtn.className = "skill-btn";
@@ -308,13 +308,12 @@
                                 exileBtn.onclick = async () => {
                                     if (!confirm(`確定要根據全場投票結果，處決玩家 [${playerObj.name}] 嗎？`)) return;
 
-                                    // 重新拉取最新數據進行勝負精算
                                     const freshSnap = await get(ref(db, `rooms/${currentRoom}`));
                                     if (!freshSnap.exists()) return;
                                     const rData = freshSnap.val();
                                     const currentPlayers = rData.players || {};
 
-                                    currentPlayers[id].isDead = true; // 模擬當前玩家已死
+                                    currentPlayers[id].isDead = true; 
 
                                     let aliveWolves = 0;
                                     let aliveGoodGuys = 0;
@@ -420,10 +419,10 @@
 
             set(ref(db, `rooms/${currentRoom}/state`), "night");
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-            push(logsRef).set({ text: `🎬 房主已確認！遊戲開始！天黑請閉眼，請在上方盲盒查看個人身份！` });
+            push(logsRef).set({ text: `🎬 房主已確認！遊戲開始！天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
         });
 
-        // ☀️ 【核心修復】天光結算中心（改用安全嘅 Atomic 全局同步更新）
+        // ☀️ 天光結算中心
         dayBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
@@ -462,13 +461,16 @@
                 }
             });
 
-            // 🛠️ 建立一個大型原子更新物件，一次過寫入，阻斷 Race Condition
+            // 🛠️ 【核心修復】建立原子更新物件，將 night_actions 直接設為 null 徹底杜絕 race condition
             const nightUpdates = {};
             
             // 標記死者
             deadTonightIds.forEach(deadId => {
                 nightUpdates[`rooms/${currentRoom}/players/${deadId}/isDead`] = true;
             });
+
+            // 徹底清除黑夜秘密行動數據，阻斷不死身 Bug
+            nightUpdates[`rooms/${currentRoom}/night_actions`] = null;
 
             // 生成結算日誌
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
@@ -483,7 +485,7 @@
                 nightUpdates[`rooms/${currentRoom}/logs/${logKey2}`] = { text: `💀 昨晚陣亡的人有：[ ${uniqueDead.join(', ')} ]。` };
             }
 
-            // 判斷遊戲是否因為黑夜死人而完結
+            // 判斷遊戲勝負
             if (aliveWolves === 0) {
                 nightUpdates[`rooms/${currentRoom}/state`] = "ended";
                 const logKey3 = push(logsRef).key;
@@ -493,15 +495,11 @@
                 const logKey3 = push(logsRef).key;
                 nightUpdates[`rooms/${currentRoom}/logs/${logKey3}`] = { text: `🐺 狼人數量已大於或等於好人！狼人陣營獲勝！` };
             } else {
-                // 如果未完結，就正常轉成白天
                 nightUpdates[`rooms/${currentRoom}/state`] = "day";
             }
 
-            // 發射原子更新
+            // 一次過寫入雲端
             await update(ref(db), nightUpdates);
-
-            // 清理黑夜秘密行動數據
-            remove(ref(db, `rooms/${currentRoom}/night_actions`));
         });
 
         // 🌙 入夜
