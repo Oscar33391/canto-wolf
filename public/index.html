@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.12</title>
+    <title>廣東話狼人殺 v1.7.13</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.12</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.13</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -304,6 +304,7 @@
                                 const li = document.createElement('li');
                                 let statusHtml = "";
                                 let voteHtml = "";
+                                let teamHtml = "";
                                 const isDead = playerObj.isDead === true;
                                 
                                 if (isDead) {
@@ -314,6 +315,11 @@
                                     statusHtml = playerObj.ready ? `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
                                 } else {
                                     statusHtml = `<span style="color:#aaa;">[🔒 身份隱藏]</span>`;
+                                }
+
+                                // 🐺 Show Wolf teammates to other Wolves
+                                if (gameState !== "waiting" && myRole && myRole.includes("狼人") && playerObj.role && playerObj.role.includes("狼人") && id !== myPlayerId) {
+                                    teamHtml = `<span class="status-badge" style="background:#8b0000; color:#fff; margin-left:5px;">🐺 狼人同伴</span>`;
                                 }
 
                                 if (gameState === "day" && !isDead) {
@@ -330,7 +336,7 @@
                                     }
                                 }
 
-                                li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
+                                li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${teamHtml} ${voteHtml}</span>`;
 
                                 if (gameState === "night" && !isDead && !amIDead) {
                                     
