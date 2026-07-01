@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 - 穩定回合制版</title>
+    <title>廣東話狼人殺 - 女巫與天光自動結算版</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -24,16 +24,15 @@
         .skill-btn { width: auto; padding: 4px 10px; font-size: 12px; background: #0077ff; margin: 0; }
         .status-badge { font-size: 12px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         
+        /* 🧙‍♀️ 女巫專屬秘密面板 */
         #witch-panel { width: 85%; background: #4b0082; margin: 10px auto; padding: 10px; border-radius: 4px; border: 2px solid #da70d6; text-align: left; display: none; }
-        .phase-indicator { background: #333; padding: 5px; border-radius: 4px; font-size: 14px; color: #ffcc00; margin: 5px 0; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 Phase 6 (修復穩定版)</h2>
+        <h2>🐺 廣東話狼人殺 Phase 5 (硬核結算)</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
-        <div id="current-turn-box" class="phase-indicator" style="display: none;">🌙 當前行動：等待中</div>
         
         <div id="setup-area">
             <input type="text" id="nameInput" placeholder="打你嘅大名 (e.g. 鴨寮街預言家)">
@@ -52,19 +51,16 @@
 
         <div id="witch-panel">
             <p style="margin: 0; font-weight: bold; color: #ffc0cb;">🔮 女巫秘密魔法藥水：</p>
-            <p id="witch-hint" style="font-size: 14px; margin: 5px 0;">昨晚被殺的是：...</p>
+            <p id="witch-hint" style="font-size: 14px; margin: 5px 0;">昨晚被殺的是：等緊狼人落刀...</p>
             <button id="witchSaveBtn" class="skill-btn" style="background: #28a745;">💊 用解藥救佢</button>
+            <button id="witchPoisonBtn" class="skill-btn" style="background: #e50914;">🧪 用毒藥毒其他人</button>
         </div>
 
         <div id="host-panel" style="display: none; border: 2px dashed #28a745; padding: 10px; margin: 10px 0; border-radius: 6px;">
             <p style="margin: 0 0 5px 0; font-size: 14px; color: #28a745; font-weight: bold;">👑 房主控制面板</p>
             <button id="startGameBtn" style="background: #28a745; display: none;">🎬 全員準備就緒！點擊確認開局</button>
-            
-            <button id="nextToWitchBtn" style="background: #4b0082; display: none;">👉 移交到女巫回合</button>
-            <button id="nextToProphetBtn" style="background: #00abc5; display: none;">👉 移交到預言家回合</button>
             <button id="dayBtn" style="background: #28a745; display: none;">☀️ 叫醒所有人（天光結算）</button>
-            
-            <button id="nightBtn" style="background: #1f2833; border: 2px solid #45f3ff; color: #45f3ff; display: none;">🌙 天黑請閉眼（重新入夜）</button>
+            <button id="nightBtn" style="background: #1f2833; border: 2px solid #45f3ff; color: #45f3ff; display: none;">🌙 天黑請閉眼（入夜）</button>
         </div>
 
         <h3 id="player-count-title">👥 間房有邊個：</h3>
@@ -100,9 +96,9 @@
         let isHost = false; 
         let amIReady = false; 
 
+        // 女巫每局只有一瓶藥水的狀態控制
         let hasSavePotion = true;
         let hasPoisonPotion = true;
-        let checkedTonight = false; // 限制預言家每晚只能驗一次
 
         const nameInput = document.getElementById('nameInput');
         const roomInput = document.getElementById('roomInput');
@@ -112,8 +108,6 @@
         const startGameBtn = document.getElementById('startGameBtn');
         const dayBtn = document.getElementById('dayBtn');
         const nightBtn = document.getElementById('nightBtn');
-        const nextToWitchBtn = document.getElementById('nextToWitchBtn');
-        const nextToProphetBtn = document.getElementById('nextToProphetBtn');
         const hostPanel = document.getElementById('host-panel');
         const playerList = document.getElementById('playerList');
         const logBox = document.getElementById('log-box');
@@ -126,7 +120,7 @@
         const witchPanel = document.getElementById('witch-panel');
         const witchHint = document.getElementById('witch-hint');
         const witchSaveBtn = document.getElementById('witchSaveBtn');
-        const currentTurnBox = document.getElementById('current-turn-box');
+        const witchPoisonBtn = document.getElementById('witchPoisonBtn');
 
         joinBtn.addEventListener('click', async () => {
             const username = nameInput.value.trim();
@@ -137,260 +131,228 @@
                 return;
             }
 
-            // 鎖定按鈕防止重覆點擊
-            joinBtn.disabled = true;
-            joinBtn.innerText = "連線中...";
-
             const roomRef = ref(db, `rooms/${currentRoom}`);
             const playersRef = ref(db, `rooms/${currentRoom}/players`);
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
 
-            try {
-                const snap = await get(playersRef);
-                if (!snap.exists()) {
-                    isHost = true;
-                    await set(ref(db, `rooms/${currentRoom}/state`), "waiting"); 
-                    await set(ref(db, `rooms/${currentRoom}/night_phase`), "wolf");
+            const snap = await get(playersRef);
+            if (!snap.exists()) {
+                isHost = true;
+                set(ref(db, `rooms/${currentRoom}/state`), "waiting"); 
+            }
+
+            const newPlayerRef = push(playersRef);
+            myPlayerId = newPlayerRef.key; 
+            set(newPlayerRef, { name: username, role: "等待開局...", ready: false });
+
+            const newLogRef = push(logsRef);
+            set(newLogRef, { text: `👤 ${username} 塞咗入房喇。` });
+
+            joinBtn.disabled = true;
+            joinBtn.innerText = "成功入房";
+            document.getElementById('setup-area').style.display = "none";
+            readyArea.style.display = "block"; 
+            
+            if (isHost) {
+                hostPanel.style.display = "block";
+            }
+
+            onValue(roomRef, (snapshot) => {
+                const roomData = snapshot.val();
+                if (!roomData) return;
+
+                const gameState = roomData.state || "waiting";
+                const totalInRoom = roomData.players ? Object.keys(roomData.players).length : 0;
+
+                playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} 人)：`;
+
+                let readyCount = 0;
+                if (roomData.players) {
+                    Object.values(roomData.players).forEach(p => {
+                        if (p.ready === true) readyCount++;
+                    });
                 }
 
-                const newPlayerRef = push(playersRef);
-                myPlayerId = newPlayerRef.key; 
-                
-                await set(newPlayerRef, { 
-                    name: username, 
-                    role: "等待開局...", 
-                    ready: false 
-                });
-
-                await push(logsRef).set({ text: `👤 ${username} 塞咗入房喇。` });
-
-                // UI 切換
-                joinBtn.innerText = "成功入房";
-                document.getElementById('setup-area').style.display = "none";
-                readyArea.style.display = "block"; 
-                if (isHost) hostPanel.style.display = "block";
-
-                // 🌟 開始安全的實時監聽
-                onValue(roomRef, (snapshot) => {
-                    const roomData = snapshot.val();
-                    if (!roomData) return;
-
-                    const gameState = roomData.state || "waiting";
-                    const nightPhase = roomData.night_phase || "wolf";
-                    const totalInRoom = roomData.players ? Object.keys(roomData.players).length : 0;
-
-                    playerCountTitle.innerText = `👥 間房有邊個 (${totalInRoom} 人)：`;
-
-                    let readyCount = 0;
-                    if (roomData.players) {
-                        Object.values(roomData.players).forEach(p => {
-                            if (p && p.ready === true) readyCount++;
-                        });
+                // 1. 狀態渲染與切換
+                if (gameState === "waiting") {
+                    phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒... (${readyCount} / ${totalInRoom} 已準備)`;
+                    readyArea.style.display = "block"; 
+                    witchPanel.style.display = "none";
+                    
+                    if (isHost && totalInRoom >= 2 && readyCount === totalInRoom) {
+                        startGameBtn.style.display = "block";
+                        readySummaryText.innerText = "✅ 全員已準備好！請房主手動點擊下方按鈕確認開局！";
+                    } else {
+                        startGameBtn.style.display = "none";
+                        readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
                     }
+                    if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "none"; }
 
-                    // --- 狀態切換渲染 ---
-                    if (gameState === "waiting") {
-                        phaseStatus.innerText = `⏳ 狀態：等緊所有人準備就緒...`;
-                        readyArea.style.display = "block"; 
-                        witchPanel.style.display = "none";
-                        currentTurnBox.style.display = "none";
-                        
-                        if (isHost && totalInRoom >= 2 && readyCount === totalInRoom) {
-                            startGameBtn.style.display = "block";
-                            readySummaryText.innerText = "✅ 全員已準備好！請房主確認開局！";
+                } else if (gameState === "night") {
+                    document.body.classList.add('night-mode');
+                    mainContainer.classList.add('night-card');
+                    phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜行動中...";
+                    readyArea.style.display = "none"; 
+                    startGameBtn.style.display = "none";
+                    
+                    if (isHost) { dayBtn.style.display = "block"; nightBtn.style.display = "none"; }
+
+                    // 🧙‍♀️ 女巫黑夜專屬顯示
+                    if (myRole && myRole.includes("女巫")) {
+                        witchPanel.style.display = "block";
+                        const actions = roomData.night_actions || {};
+                        if (actions.wolf_target) {
+                            // 從 ID 查出被刀者名字
+                            const victimId = actions.wolf_target;
+                            const victimName = roomData.players[victimId] ? roomData.players[victimId].name : "未知玩家";
+                            witchHint.innerText = `🚨 收到風！今晚被殺嘅係：[${victimName}]`;
+                            witchSaveBtn.disabled = !hasSavePotion;
                         } else {
-                            startGameBtn.style.display = "none";
-                            readySummaryText.innerText = `⌛ 等待大家準備中... (${readyCount} / ${totalInRoom})`;
+                            witchHint.innerText = `⏳ 等緊狼人落刀，藥水先可以發動...`;
+                            witchSaveBtn.disabled = true;
                         }
-                        if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "none"; nextToWitchBtn.style.display = "none"; nextToProphetBtn.style.display = "none"; }
-
-                    } else if (gameState === "night") {
-                        document.body.classList.add('night-mode');
-                        mainContainer.classList.add('night-card');
-                        phaseStatus.innerText = "🌙 【天黑請閉眼】黑夜秘密行動中...";
-                        readyArea.style.display = "none"; 
-                        startGameBtn.style.display = "none";
-                        currentTurnBox.style.display = "block";
-
-                        if (nightPhase === "wolf") {
-                            currentTurnBox.innerText = "🐺 當前回合：狼人請睜眼殺人 🔪";
-                            if (isHost) { nextToWitchBtn.style.display = "block"; nextToProphetBtn.style.display = "none"; dayBtn.style.display = "none"; nightBtn.style.display = "none"; }
-                            witchPanel.style.display = "none";
-                        } 
-                        else if (nightPhase === "witch") {
-                            currentTurnBox.innerText = "🧙‍♀️ 當前回合：女巫請睜眼施法 💊🧪";
-                            if (isHost) { nextToWitchBtn.style.display = "none"; nextToProphetBtn.style.display = "block"; dayBtn.style.display = "none"; nightBtn.style.display = "none"; }
-                            
-                            if (myRole && myRole.includes("女巫")) {
-                                witchPanel.style.display = "block";
-                                const actions = roomData.night_actions || {};
-                                if (actions.wolf_target) {
-                                    const victimName = roomData.players[actions.wolf_target] ? roomData.players[actions.wolf_target].name : "未知玩家";
-                                    witchHint.innerText = `🚨 收到風！今晚被殺嘅係：[${victimName}]`;
-                                    witchSaveBtn.disabled = !hasSavePotion;
-                                } else {
-                                    witchHint.innerText = `🕊️ 狼人今晚好似冇殺到人（或未落刀）。`;
-                                    witchSaveBtn.disabled = true;
-                                }
-                            } else {
-                                witchPanel.style.display = "none";
-                            }
-                        } 
-                        else if (nightPhase === "prophet") {
-                            currentTurnBox.innerText = "👁️ 當前回合：預言家請睜眼驗人 🔮";
-                            if (isHost) { nextToWitchBtn.style.display = "none"; nextToProphetBtn.style.display = "none"; dayBtn.style.display = "block"; nightBtn.style.display = "none"; }
-                            witchPanel.style.display = "none";
-                        }
-
-                    } else if (gameState === "day") {
-                        document.body.classList.remove('night-mode');
-                        mainContainer.classList.remove('night-card');
-                        phaseStatus.innerText = "☀️ 【天光請睜眼】大家請討論！";
-                        readyArea.style.display = "none";
-                        startGameBtn.style.display = "none";
+                        witchPoisonBtn.disabled = !hasPoisonPotion;
+                    } else {
                         witchPanel.style.display = "none";
-                        currentTurnBox.style.display = "none";
-                        
-                        if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "block"; nextToWitchBtn.style.display = "none"; nextToProphetBtn.style.display = "none"; }
                     }
 
-                    // --- 渲染玩家名單與按鈕 ---
-                    playerList.innerHTML = '';
-                    if (roomData.players) {
-                        // 讀取自己的最新狀態
-                        if (roomData.players[myPlayerId]) {
-                            myRole = roomData.players[myPlayerId].role || "等待開局...";
-                            amIReady = roomData.players[myPlayerId].ready || false;
+                } else if (gameState === "day") {
+                    document.body.classList.remove('night-mode');
+                    mainContainer.classList.remove('night-card');
+                    phaseStatus.innerText = "☀️ 【天光請睜眼】大家請討論！";
+                    readyArea.style.display = "none";
+                    startGameBtn.style.display = "none";
+                    witchPanel.style.display = "none";
+                    
+                    if (isHost) { dayBtn.style.display = "none"; nightBtn.style.display = "block"; }
+                }
+
+                // 2. 更新玩家名單展示與技能判定
+                playerList.innerHTML = '';
+                if (roomData.players) {
+                    if (roomData.players[myPlayerId]) {
+                        myRole = roomData.players[myPlayerId].role;
+                        amIReady = roomData.players[myPlayerId].ready || false;
+                        
+                        if (amIReady) {
+                            toggleReadyBtn.innerText = "✅ 你已準備就緒 (點擊取消)";
+                            toggleReadyBtn.classList.add('ready-active');
+                        } else {
+                            toggleReadyBtn.innerText = "✋ 點擊準備就緒";
+                            toggleReadyBtn.classList.remove('ready-active');
+                        }
+                    }
+
+                    Object.entries(roomData.players).forEach(([id, playerObj]) => {
+                        if (playerObj && playerObj.name) {
+                            const li = document.createElement('li');
                             
-                            if (amIReady) {
-                                toggleReadyBtn.innerText = "✅ 你已準備就緒 (點擊取消)";
-                                toggleReadyBtn.classList.add('ready-active');
+                            let statusHtml = "";
+                            if (gameState === "waiting") {
+                                statusHtml = playerObj.ready ? 
+                                    `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : 
+                                    `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
                             } else {
-                                toggleReadyBtn.innerText = "✋ 點擊準備就緒";
-                                toggleReadyBtn.classList.remove('ready-active');
+                                let displayRole = playerObj.role === "等待開局..." ? "⏳ 等待中" : "🔒 身份已隱藏";
+                                statusHtml = `<span style="color:#aaa;">[${displayRole}]</span>`;
+                            }
+
+                            li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml}</span>`;
+
+                            // 🚨 秘密黑夜技能操作（不再發公眾 Log，改寫入秘密對局區）
+                            if (gameState === "night" && id !== myPlayerId) {
+                                if (myRole && myRole.includes("狼人")) {
+                                    const killBtn = document.createElement('button');
+                                    killBtn.className = "skill-btn";
+                                    killBtn.innerText = "🔪 隊冧佢";
+                                    killBtn.onclick = () => {
+                                        // 秘密寫入，不寫入公眾 logs 穿煲
+                                        set(ref(db, `rooms/${currentRoom}/night_actions/wolf_target`), id);
+                                        alert(`你已秘密投票今晚殺死 ${playerObj.name}！`);
+                                    };
+                                    li.appendChild(killBtn);
+                                }
+                                else if (myRole && myRole.includes("預言家")) {
+                                    const checkBtn = document.createElement('button');
+                                    checkBtn.className = "skill-btn";
+                                    checkBtn.style.background = "#00abc5";
+                                    checkBtn.innerText = "👁️ 查驗";
+                                    checkBtn.onclick = () => alert(`🔮 查驗結果：${playerObj.name} 的真實身份是 [${playerObj.role}]！`);
+                                    li.appendChild(checkBtn);
+                                }
+                                // 女巫毒人按鈕
+                                else if (myRole && myRole.includes("女巫") && hasPoisonPotion) {
+                                    const poisonTargetBtn = document.createElement('button');
+                                    poisonTargetBtn.className = "skill-btn";
+                                    poisonTargetBtn.style.background = "#ba55d3";
+                                    poisonTargetBtn.innerText = "🧪 餵毒藥";
+                                    poisonTargetBtn.onclick = () => {
+                                        set(ref(db, `rooms/${currentRoom}/night_actions/witch_poison`), id);
+                                        hasPoisonPotion = false;
+                                        alert(`調配成功！今晚將會毒殺 ${playerObj.name}。`);
+                                    };
+                                    li.appendChild(poisonTargetBtn);
+                                }
+                            }
+
+                            playerList.appendChild(li);
+
+                            if (id === myPlayerId && playerObj.role !== "等待開局...") {
+                                identityCard.style.display = "block";
+                                roleText.innerText = myRole;
                             }
                         }
+                    });
+                }
 
-                        Object.entries(roomData.players).forEach(([id, playerObj]) => {
-                            if (playerObj && playerObj.name) {
-                                const li = document.createElement('li');
-                                
-                                let statusHtml = "";
-                                if (gameState === "waiting") {
-                                    statusHtml = playerObj.ready ? 
-                                        `<span class="status-badge" style="background:#28a745; color:white;">已準備</span>` : 
-                                        `<span class="status-badge" style="background:#555; color:#aaa;">未準備</span>`;
-                                } else {
-                                    let displayRole = playerObj.role === "等待開局..." ? "⏳ 等待中" : "🔒 身份已隱藏";
-                                    statusHtml = `<span style="color:#aaa;">[${displayRole}]</span>`;
-                                }
-
-                                li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml}</span>`;
-
-                                // 黑夜技能按鈕控管
-                                if (gameState === "night" && id !== myPlayerId) {
-                                    if (nightPhase === "wolf" && myRole && myRole.includes("狼人")) {
-                                        const killBtn = document.createElement('button');
-                                        killBtn.className = "skill-btn";
-                                        killBtn.innerText = "🔪 隊冧佢";
-                                        killBtn.onclick = () => {
-                                            set(ref(db, `rooms/${currentRoom}/night_actions/wolf_target`), id);
-                                            alert(`你已秘密投票今晚殺死 ${playerObj.name}！`);
-                                        };
-                                        li.appendChild(killBtn);
-                                    }
-                                    else if (nightPhase === "witch" && myRole && myRole.includes("女巫") && hasPoisonPotion) {
-                                        const poisonTargetBtn = document.createElement('button');
-                                        poisonTargetBtn.className = "skill-btn";
-                                        poisonTargetBtn.style.background = "#ba55d3";
-                                        poisonTargetBtn.innerText = "🧪 餵毒藥";
-                                        poisonTargetBtn.onclick = () => {
-                                            set(ref(db, `rooms/${currentRoom}/night_actions/witch_poison`), id);
-                                            hasPoisonPotion = false;
-                                            alert(`調配成功！今晚將會毒殺 ${playerObj.name}。`);
-                                        };
-                                        li.appendChild(poisonTargetBtn);
-                                    }
-                                    else if (nightPhase === "prophet" && myRole && myRole.includes("預言家")) {
-                                        const checkBtn = document.createElement('button');
-                                        checkBtn.className = "skill-btn";
-                                        checkBtn.style.background = "#00abc5";
-                                        checkBtn.innerText = checkedTonight ? "🔒 今晚已驗" : "👁️ 查驗";
-                                        if (checkedTonight) checkBtn.disabled = true;
-
-                                        checkBtn.onclick = () => {
-                                            if (checkedTonight) return;
-                                            checkedTonight = true;
-                                            checkBtn.disabled = true;
-                                            checkBtn.innerText = "🔒 今晚已驗";
-                                            alert(`🔮 查驗結果：${playerObj.name} 的真實身份是 [${playerObj.role}]！`);
-                                        };
-                                        li.appendChild(checkBtn);
-                                    }
-                                }
-
-                                playerList.appendChild(li);
-
-                                if (id === myPlayerId && playerObj.role !== "等待開局...") {
-                                    identityCard.style.display = "block";
-                                    roleText.innerText = myRole;
-                                }
-                            }
-                        });
-                    }
-
-                    // 渲染日誌
-                    logBox.innerHTML = '';
-                    if (roomData.logs) {
-                        Object.values(roomData.logs).forEach(logObj => {
-                            if (logObj && logObj.text) {
-                                const p = document.createElement('p');
-                                p.innerText = logObj.text;
-                                p.style.margin = "4px 0";
-                                logBox.appendChild(p);
-                            }
-                        });
-                    }
-                    logBox.scrollTop = logBox.scrollHeight;
-                });
-
-            } catch (err) {
-                console.error(err);
-                alert("入房失敗，請重新整理網頁再試！");
-                joinBtn.disabled = false;
-                joinBtn.innerText = "進攻間房";
-            }
+                // 3. 更新日誌
+                logBox.innerHTML = '';
+                if (roomData.logs) {
+                    Object.values(roomData.logs).forEach(logObj => {
+                        if (logObj && logObj.text) {
+                            const p = document.createElement('p');
+                            p.innerText = logObj.text;
+                            p.style.margin = "4px 0";
+                            logBox.appendChild(p);
+                        }
+                    });
+                }
+                logBox.scrollTop = logBox.scrollHeight;
+            });
         });
 
-        // 女巫用解藥
-        witchSaveBtn.addEventListener('click', () => {
+        // 女巫點擊解藥
+        witchSaveBtn.addEventListener('click', async () => {
             if (!currentRoom || !hasSavePotion) return;
             set(ref(db, `rooms/${currentRoom}/night_actions/witch_save`), true);
             hasSavePotion = false;
-            witchSaveBtn.disabled = true;
             alert("💊 你已對今晚被刀的玩家使用了萬靈解藥！");
         });
 
-        // 玩家切換準備狀態
         toggleReadyBtn.addEventListener('click', () => {
             if (!currentRoom || !myPlayerId) return;
             const nextReadyState = !amIReady;
             set(ref(db, `rooms/${currentRoom}/players/${myPlayerId}/ready`), nextReadyState);
+            
             const username = nameInput.value.trim();
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: nextReadyState ? `👍 ${username} 準備好喇！` : `✋ ${username} 取消咗準備。` });
+            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
+            push(logsRef).set({ text: nextReadyState ? `👍 ${username} 準備好喇！` : `✋ ${username} 取消咗準備。` });
         });
 
-        // 房主開局
+        // 🎬 房主開局（重新定義牌組：引入女巫 🧙‍♀️）
         startGameBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
-            const snap = await get(ref(db, `rooms/${currentRoom}/players`));
+            const playersRef = ref(db, `rooms/${currentRoom}/players`);
+            const snap = await get(playersRef);
             if (!snap.exists()) return;
 
-            const playerIds = Object.keys(snap.val());
+            const playersData = snap.val();
+            const playerIds = Object.keys(playersData);
             const totalPlayers = playerIds.length;
 
             let rolesPool = [];
+            // 💡 3人與4人局硬核牌組分配
             if (totalPlayers <= 2) rolesPool = ["🐺 狼人", "👁️ 預言家"];
             else if (totalPlayers === 3) rolesPool = ["🐺 狼人", "👁️ 預言家", "🧙‍♀️ 女巫"];
             else rolesPool = ["🐺 狼人", "👁️ 預言家", "🧙‍♀️ 女巫", "🧑‍🌾 村民"];
@@ -405,30 +367,19 @@
                 set(ref(db, `rooms/${currentRoom}/players/${id}/role`), assignedRole);
             });
 
-            await set(ref(db, `rooms/${currentRoom}/night_phase`), "wolf");
-            await set(ref(db, `rooms/${currentRoom}/state`), "night");
+            set(ref(db, `rooms/${currentRoom}/state`), "night");
             
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
-            push(logsRef).set({ text: `🎬 房主已開局！遊戲正式開始！` });
-            push(logsRef).set({ text: `🌙 天黑請閉眼 ➔ 🐺 狼人請秘密行動。` });
+            push(logsRef).set({ text: `🎬 房主已點擊確認！遊戲正式開始！` });
+            push(logsRef).set({ text: `🌙 天黑請閉眼，請在上方黃色盲盒查看個人身份！` });
         });
 
-        // 房主移交控制權
-        nextToWitchBtn.addEventListener('click', () => {
-            set(ref(db, `rooms/${currentRoom}/night_phase`), "witch");
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🔮 法官：狼人請閉眼 ➔ 🧙‍♀️ 女巫請秘密行動。` });
-        });
-
-        nextToProphetBtn.addEventListener('click', () => {
-            set(ref(db, `rooms/${currentRoom}/night_phase`), "prophet");
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🔮 法官：女巫請閉眼 ➔ 👁️ 預言家請秘密行動。` });
-        });
-
-        // 天光自動結算
+        // ☀️ 房主控制切換成天光 —— 🧠 硬核自動結算中心 🧠
         dayBtn.addEventListener('click', async () => {
             if (!currentRoom || !isHost) return;
 
-            const snap = await get(ref(db, `rooms/${currentRoom}`));
+            const roomRef = ref(db, `rooms/${currentRoom}`);
+            const snap = await get(roomRef);
             if (!snap.exists()) return;
 
             const roomData = snap.val();
@@ -436,34 +387,49 @@
             const players = roomData.players || {};
             const logsRef = ref(db, `rooms/${currentRoom}/logs`);
 
+            let wolfTarget = actions.wolf_target || null;
+            let witchSaved = actions.witch_save || false;
+            let witchPoisoned = actions.witch_poison || null;
+
             let deadTonight = [];
-            if (actions.wolf_target && !actions.witch_save) {
-                deadTonight.push(players[actions.wolf_target] ? players[actions.wolf_target].name : "未知玩家");
-            }
-            if (actions.witch_poison) {
-                deadTonight.push(players[actions.witch_poison] ? players[actions.witch_poison].name : "未知玩家");
+
+            // 1. 計算狼刀與解藥
+            if (wolfTarget) {
+                if (witchSaved) {
+                    // 被救活了，相安無事
+                } else {
+                    deadTonight.push(players[wolfTarget] ? players[wolfTarget].name : "未知玩家");
+                }
             }
 
-            await set(ref(db, `rooms/${currentRoom}/state`), "day");
+            // 2. 計算毒藥
+            if (witchPoisoned) {
+                deadTonight.push(players[witchPoisoned] ? players[witchPoisoned].name : "未知玩家");
+            }
 
-            push(logsRef).set({ text: `☀️ 【天亮了】所有人睜開眼睛。` });
+            // 3. 切換至白天狀態
+            set(ref(db, `rooms/${currentRoom}/state`), "day");
+
+            // 4. 公布死亡名單
+            push(logsRef).set({ text: `☀️ 【天亮了】房主叫醒了所有人。` });
             if (deadTonight.length === 0) {
-                push(logsRef).set({ text: `🕊️ 昨晚是一個平安夜！` });
+                push(logsRef).set({ text: `🕊️ 尋晚係平安夜！冇人死到，大吉大利！` });
             } else {
+                // 去重顯示
                 let uniqueDead = [...new Set(deadTonight)];
-                push(logsRef).set({ text: `💀 昨晚死咗嘅人有：[ ${uniqueDead.join(', ')} ]。` });
+                push(logsRef).set({ text: `💀 尋晚死咗嘅人有：[ ${uniqueDead.join(', ')} ]。全場同哀！` });
             }
 
+            // 5. 🧠 清空這一晚的秘密行動數據，準備迎接下一晚
             remove(ref(db, `rooms/${currentRoom}/night_actions`));
         });
 
-        // 重新入夜
+        // 🌙 房主控制切換回黑夜
         nightBtn.addEventListener('click', () => {
             if (!currentRoom) return;
-            checkedTonight = false; // 重置預言家
-            set(ref(db, `rooms/${currentRoom}/night_phase`), "wolf");
             set(ref(db, `rooms/${currentRoom}/state`), "night");
-            push(ref(db, `rooms/${currentRoom}/logs`)).set({ text: `🌙 天黑請閉眼 ➔ 🐺 狼人請開始行動！` });
+            const logsRef = ref(db, `rooms/${currentRoom}/logs`);
+            push(logsRef).set({ text: `🌙 【天黑請閉眼】黑夜再次降臨，狼人、預言家、女巫請秘密行動！` });
         });
     </script>
 </body>
