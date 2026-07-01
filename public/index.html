@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 v1.7.10</title>
+    <title>廣東話狼人殺 v1.7.11</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 20px; transition: background 0.5s; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -33,7 +33,7 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <h2>🐺 廣東話狼人殺 v1.7.10</h2>
+        <h2>🐺 廣東話狼人殺 v1.7.11</h2>
         <h3 id="phase-status">⏳ 狀態：等待玩家入房...</h3>
         
         <div id="setup-area">
@@ -332,14 +332,17 @@
 
                                 li.innerHTML = `<span>👤 ${playerObj.name} ${statusHtml} ${voteHtml}</span>`;
 
-                                if (gameState === "night" && id !== myPlayerId && !isDead && !amIDead) {
+                                // NIGHT ACTIONS: Removed id !== myPlayerId so Wolves can self-target
+                                if (gameState === "night" && !isDead && !amIDead) {
+                                    
+                                    // 🐺 WOLF: Can target ANYONE, including themselves (自刀)
                                     if (myRole && myRole.includes("狼人")) {
                                         const hasLocked = nightWolfLocks[myPlayerId] === true;
 
                                         const killBtn = document.createElement('button');
                                         killBtn.className = "skill-btn";
                                         killBtn.style.background = hasLocked ? "#555555" : "#b30000";
-                                        killBtn.innerText = "🔪 點選目標";
+                                        killBtn.innerText = id === myPlayerId ? "🔪 刀自己 (自刀)" : "🔪 點選目標";
                                         
                                         if (hasLocked) {
                                             killBtn.style.cursor = "not-allowed";
@@ -367,7 +370,8 @@
                                             li.appendChild(lockBtn);
                                         }
                                     }
-                                    else if (myRole && myRole.includes("預言家")) {
+                                    // 👁️ SEER: Cannot check themselves
+                                    else if (myRole && myRole.includes("預言家") && id !== myPlayerId) {
                                         const checkBtn = document.createElement('button');
                                         checkBtn.className = "skill-btn";
                                         checkBtn.style.background = "#00abc5";
@@ -379,7 +383,8 @@
                                         };
                                         li.appendChild(checkBtn);
                                     }
-                                    else if (myRole && myRole.includes("女巫") && roomData.players[myPlayerId].hasPoisonPotion !== false) {
+                                    // 🧙‍♀️ WITCH: Cannot poison themselves
+                                    else if (myRole && myRole.includes("女巫") && id !== myPlayerId && roomData.players[myPlayerId].hasPoisonPotion !== false) {
                                         const poisonTargetBtn = document.createElement('button');
                                         poisonTargetBtn.className = "skill-btn";
                                         poisonTargetBtn.style.background = "#ba55d3";
