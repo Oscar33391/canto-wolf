@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話狼人殺 - Firebase同步版</title>
+    <title>廣東話狼人殺 - Firebase完美同步版</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #ffffff; text-align: center; padding: 30px; }
         .container { max-width: 450px; background: #1e1e1e; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -73,37 +73,42 @@
             const playersRef = ref(db, `rooms/${roomCode}/players`);
             const logsRef = ref(db, `rooms/${roomCode}/logs`);
 
-            // 2. 把自己寫入「玩家名單群組」
+            // 2. 把自己寫入「玩家名單」 (統一格式為 Object 儲存)
             const newPlayerRef = push(playersRef);
-            set(newPlayerRef, username);
+            set(newPlayerRef, { name: username });
 
-            // 3. 同時寫入一條歷史 Log
+            // 3. 寫入歷史 Log (統一格式為 Object 儲存)
             const newLogRef = push(logsRef);
-            set(newLogRef, `👤 ${username} 成功塞咗入嚟房間 [${roomCode}] 喇！`);
+            set(newLogRef, { text: `👤 ${username} 成功塞咗入嚟房間 [${roomCode}] 喇！` });
 
-            // 4. 【核心關鍵】使用 onValue 監聽整間房嘅變動，不論新舊玩家，只要有人入，全部人一齊觸發更新
+            // 4. 使用 onValue 監聽，並安全解讀 Object 數據
             onValue(roomRef, (snapshot) => {
                 const roomData = snapshot.val();
                 if (!roomData) return;
 
-                // 更新玩家名單
+                // 【更新玩家名單】
                 playerList.innerHTML = '';
                 if (roomData.players) {
-                    Object.values(roomData.players).forEach(name => {
-                        const li = document.createElement('li');
-                        li.innerText = `👤 ${name}`;
-                        playerList.appendChild(li);
+                    Object.values(roomData.players).forEach(playerObj => {
+                        if (playerObj && playerObj.name) {
+                            const li = document.createElement('li');
+                            li.innerText = `👤 ${playerObj.name}`;
+                            playerList.appendChild(li);
+                        }
                     });
                 }
 
-                // 更新動態紀錄 Log
+                // 【更新動態紀錄 Log】
                 logBox.innerHTML = '';
                 if (roomData.logs) {
-                    Object.values(roomData.logs).forEach(logText => {
-                        const p = document.createElement('p');
-                        p.innerText = logText;
-                        p.style.margin = "4px 0";
-                        logBox.appendChild(p);
+                    Object.values(roomData.logs).forEach(logObj => {
+                        // 確保讀到嘅係 Object 兼且有 text 屬性，防出 undefined
+                        if (logObj && logObj.text) {
+                            const p = document.createElement('p');
+                            p.innerText = logObj.text;
+                            p.style.margin = "4px 0";
+                            logBox.appendChild(p);
+                        }
                     });
                 }
                 logBox.scrollTop = logBox.scrollHeight;
